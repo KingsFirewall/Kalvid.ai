@@ -1,0 +1,111 @@
+{
+  "_README": [
+    "Price table for the Budget Guard's pre-call estimates.",
+    "Entries with \"last_verified\": null are UNVERIFIED \u2014 the router REFUSES to make a",
+    "live (billable) call using one. Look the real price up in the provider's pricing",
+    "page/dashboard, put it in, and set last_verified to today (YYYY-MM-DD).",
+    "",
+    "units: 'per_call' = flat USD per request. 'per_second' = USD x output duration.",
+    "",
+    "Optional per-rate fields:",
+    "  supports: [...]        -> the model's ACCEPTED input field names. The adapter sends",
+    "  usd_by / price_by     -> price varies by an input param (e.g. resolution tier).",
+    "  price_expires         -> promo end date; the rate reads as UNVERIFIED from then.",
+    "                            nothing outside this list, so an unsupported parameter is",
+    "                            never smuggled into a request.",
+    "  params: {stage: {...}} -> per-stage input values ('all' applies to every stage).",
+    "  identity_via_image     -> the model carries persona identity through image_url, so a",
+    "                            persona job must supply a reference still.",
+    "  fixed_durations: [..]  -> model only emits these lengths; requests snap UP and are",
+    "                            billed at the tier. Omit for models billing by the second."
+  ],
+  "rates": {
+    "mock:mock-still": {
+      "provider": "mock",
+      "model": "mock-still",
+      "kind": "image",
+      "unit": "per_call",
+      "usd": 0.0,
+      "last_verified": "2099-01-01",
+      "source": "free local mock, never billable"
+    },
+    "mock:mock-clip": {
+      "provider": "mock",
+      "model": "mock-clip",
+      "kind": "video",
+      "unit": "per_second",
+      "usd": 0.0,
+      "last_verified": "2099-01-01",
+      "source": "free local mock, never billable"
+    },
+    "fal:minimax/h3-max/image-to-video": {
+      "provider": "fal",
+      "model": "minimax/h3-max/image-to-video",
+      "kind": "video",
+      "unit": "per_second",
+      "usd": 0.04,
+      "identity_via_image": true,
+      "supports": [
+        "prompt",
+        "duration",
+        "resolution",
+        "seed",
+        "image_url",
+        "end_image_url",
+        "prompt_expansion_mode",
+        "enable_safety_checker",
+        "sync_mode"
+      ],
+      "params": {
+        "all": {
+          "enable_safety_checker": true,
+          "prompt_expansion_mode": "balanced"
+        },
+        "draft": {
+          "resolution": "480P"
+        },
+        "final": {
+          "resolution": "768P"
+        }
+      },
+      "last_verified": "2026-08-30",
+      "source": "fal.ai/models/minimax/h3-max/image-to-video \u2014 schema and price read from the model page",
+      "price_by": "resolution",
+      "usd_by": {
+        "480P": 0.025,
+        "768P": 0.04
+      },
+      "price_expires": "2026-09-01",
+      "price_note": "promo launch rate, 50% off; reverts 2026-09-01 to 480P $0.05/s, 768P $0.08/s"
+    },
+    "runware:DRAFT_IMAGE_MODEL": {
+      "provider": "runware",
+      "model": "DRAFT_IMAGE_MODEL",
+      "kind": "image",
+      "unit": "per_call",
+      "usd": 0.01,
+      "last_verified": null,
+      "source": "TODO: verify at runware.ai \u2014 cheap still for a framing check"
+    },
+    "runware:DRAFT_VIDEO_MODEL": {
+      "provider": "runware",
+      "model": "DRAFT_VIDEO_MODEL",
+      "kind": "video",
+      "unit": "per_second",
+      "usd": 0.05,
+      "last_verified": null,
+      "source": "TODO: verify at runware.ai \u2014 cheap i2v for a motion check",
+      "identity_via_image": true
+    }
+  },
+  "routing": {
+    "draft": [
+      "fal:minimax/h3-max/image-to-video",
+      "runware:DRAFT_VIDEO_MODEL",
+      "runware:DRAFT_IMAGE_MODEL"
+    ],
+    "final": [
+      "fal:minimax/h3-max/image-to-video"
+    ]
+  }
+}

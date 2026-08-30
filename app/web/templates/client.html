@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ data.client.name }} — Kalvid AI{% endblock %}
+{% block body %}
+<a class="back" href="/">← Dashboard</a>
+
+<section class="card">
+  <h2>{{ data.client.name }}</h2>
+  <p class="muted">Period {{ data.period.start }} → {{ data.period.end }}</p>
+  <div class="stats">
+    <div><span>Spent</span><strong>${{ '%.2f'|format(data.spent_this_month) }}</strong></div>
+    <div><span>In flight</span><strong>${{ '%.2f'|format(data.pending) }}</strong></div>
+    <div><span>Cap</span><strong>${{ '%.2f'|format(data.cap) }}</strong></div>
+    <div><span>Remaining</span>
+         <strong class="{{ 'hot' if data.remaining <= 0 else '' }}">${{ '%.2f'|format(data.remaining) }}</strong></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Every paid call this month</h2>
+  {% if not data.generations %}<p class="muted">No spend recorded.</p>{% else %}
+  <table>
+    <tr><th>#</th><th>Job</th><th>Persona</th><th>Stage</th><th>Provider</th>
+        <th>Status</th><th>Cost</th><th>When</th></tr>
+    {% for g in data.generations %}
+    <tr>
+      <td>{{ g.id }}</td>
+      <td><a href="/jobs/{{ g.job }}">{{ g.job }}</a></td>
+      <td>{{ g.persona }}</td>
+      <td><span class="pill {{ 'spend' if g.stage == 'final' else '' }}">{{ g.stage }}</span></td>
+      <td>{{ g.provider }}</td>
+      <td><span class="status s-{{ g.status }}">{{ g.status }}</span></td>
+      <td>${{ '%.4f'|format(g.effective_cost) }}</td>
+      <td class="muted">{{ g.created_at }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Budget audit log</h2>
+  {% if not data.budget_events %}<p class="muted">Nothing yet.</p>{% else %}
+  <table>
+    <tr><th>When</th><th>Scope</th><th>Amount</th><th>Running</th><th>Cap</th><th>Note</th></tr>
+    {% for e in data.budget_events %}
+    <tr class="{{ 'blocked' if e.blocked else '' }}">
+      <td class="muted">{{ e.created_at }}</td>
+      <td>{{ e.scope }}</td>
+      <td>${{ '%.4f'|format(e.amount_usd) }}</td>
+      <td>${{ '%.2f'|format(e.running_total) }}</td>
+      <td>${{ '%.2f'|format(e.cap_at_time) }}</td>
+      <td>{% if e.blocked %}<span class="pill hot">BLOCKED</span> {% endif %}
+          {% if e.overridden_by %}<span class="pill warm">override: {{ e.overridden_by }}</span> {% endif %}
+          {{ e.note }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

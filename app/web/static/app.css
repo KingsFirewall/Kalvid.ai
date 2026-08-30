@@ -1,0 +1,103 @@
+:root{
+  --bg:#0f1115; --panel:#171a21; --line:#262b36; --ink:#e6e9ef; --muted:#8b93a7;
+  --accent:#5b8cff; --ok:#3ecf8e; --warm:#e8b93b; --hot:#ff5d5d; --spend:#ff8a3d;
+  --radius:10px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif}
+a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em}
+
+.topbar{display:flex;align-items:center;gap:22px;padding:12px 22px;
+  background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.brand{font-weight:700;font-size:16px;color:var(--ink)}
+.brand span{color:var(--accent)}
+.topbar nav{display:flex;gap:16px;flex:1}
+.topbar nav a{color:var(--muted)}
+.mode{padding:4px 11px;border-radius:99px;font-size:11.5px;font-weight:700;letter-spacing:.04em}
+.mode-safe{background:rgba(62,207,142,.14);color:var(--ok);border:1px solid rgba(62,207,142,.35)}
+.mode-live{background:rgba(255,93,93,.14);color:var(--hot);border:1px solid rgba(255,93,93,.4)}
+
+.warnings{padding:10px 22px 0;display:flex;flex-direction:column;gap:6px}
+.warn{padding:8px 12px;border-radius:8px;font-size:12.5px;border:1px solid var(--line)}
+.warn-ok{background:rgba(62,207,142,.07);border-color:rgba(62,207,142,.25);color:#a9e6c9}
+.warn-hot{background:rgba(232,185,59,.08);border-color:rgba(232,185,59,.3);color:#e9d49a}
+
+main{padding:22px;max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+.card h2{margin:0 0 12px;font-size:15px;letter-spacing:.01em}
+.card h3{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.back{display:inline-block;color:var(--muted);font-size:13px}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--muted);font-weight:600;font-size:11.5px;
+  text-transform:uppercase;letter-spacing:.06em;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:8px;border-bottom:1px solid rgba(38,43,54,.6);vertical-align:top}
+tr.blocked td{background:rgba(255,93,93,.06)}
+.brief{color:#c3c9d6}
+.muted{color:var(--muted)} .hot{color:var(--hot)} .warm{color:var(--warm)}
+
+.pill{display:inline-block;padding:2px 8px;border-radius:99px;background:#232833;
+  color:var(--muted);font-size:11px;border:1px solid var(--line)}
+.pill.spend{background:rgba(255,138,61,.14);color:var(--spend);border-color:rgba(255,138,61,.35)}
+.pill.ok{background:rgba(62,207,142,.14);color:var(--ok);border-color:rgba(62,207,142,.3)}
+.pill.hot{background:rgba(255,93,93,.15);color:var(--hot);border-color:rgba(255,93,93,.35)}
+.pill.warm{background:rgba(232,185,59,.15);color:var(--warm);border-color:rgba(232,185,59,.35)}
+
+.status{padding:2px 8px;border-radius:5px;font-size:11.5px;font-weight:600;background:#232833;color:var(--muted)}
+.s-draft_ready{background:rgba(91,140,255,.16);color:#9db6ff}
+.s-drafting,.s-rendering,.s-approved,.s-running,.s-pending{background:rgba(232,185,59,.15);color:var(--warm)}
+.s-complete,.s-succeeded{background:rgba(62,207,142,.15);color:var(--ok)}
+.s-failed{background:rgba(255,93,93,.15);color:var(--hot)}
+.s-rejected,.s-cancelled{background:#232833;color:var(--muted)}
+
+.bar{height:6px;background:#232833;border-radius:99px;overflow:hidden;min-width:90px}
+.bar i{display:block;height:100%;background:var(--ok)}
+.bar i.warm{background:var(--warm)} .bar i.hot{background:var(--hot)}
+.barcell{width:110px}
+
+.stats{display:flex;gap:26px;flex-wrap:wrap}
+.stats div{display:flex;flex-direction:column}
+.stats span{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em}
+.stats strong{font-size:21px}
+
+.stages{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+@media(max-width:700px){.stages{grid-template-columns:1fr}}
+.stage{border:1px solid var(--line);border-radius:8px;padding:12px;background:#12151b}
+.cost{font-size:22px;margin:2px 0;font-weight:600}
+
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-block;padding:8px 14px;border-radius:8px;border:1px solid var(--line);
+  background:#232833;color:var(--ink);font-size:13px;font-weight:600;cursor:pointer}
+.btn:hover:not([disabled]){background:#2b3140;text-decoration:none}
+.btn[disabled]{opacity:.4;cursor:not-allowed}
+.btn-spend{background:var(--spend);border-color:var(--spend);color:#1a0e05}
+.btn-spend:hover:not([disabled]){background:#ff9c5c}
+.btn-quiet{background:transparent;color:var(--muted)}
+.spinner{color:var(--warm);font-size:12.5px}
+
+form.stack{display:flex;flex-direction:column;gap:9px;margin-top:12px}
+form .row{display:flex;gap:10px;flex-wrap:wrap}
+form .row label{flex:1;min-width:130px}
+label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+input,select,textarea{background:#12151b;border:1px solid var(--line);color:var(--ink);
+  padding:8px 10px;border-radius:7px;font:inherit;width:100%}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+button{cursor:pointer}
+form button{align-self:flex-start;padding:8px 16px;border-radius:8px;border:1px solid var(--accent);
+  background:var(--accent);color:#08111f;font-weight:600}
+details summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-top:12px}
+
+pre{background:#12151b;border:1px solid var(--line);border-radius:8px;padding:12px;
+  overflow-x:auto;font-size:12px;white-space:pre-wrap;word-break:break-word}
+
+.toast{position:fixed;right:18px;bottom:18px;max-width:420px;padding:12px 15px;border-radius:9px;
+  background:var(--panel);border:1px solid var(--line);box-shadow:0 8px 30px rgba(0,0,0,.5);
+  font-size:13px;z-index:50;white-space:pre-wrap}
+.toast.err{border-color:rgba(255,93,93,.5);color:#ffc9c9}
+.toast.ok{border-color:rgba(62,207,142,.4);color:#b6ebd3}

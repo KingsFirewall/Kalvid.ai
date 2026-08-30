@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block body %}
+
+<section class="grid">
+  <div class="card">
+    <h2>Budgets this month</h2>
+    {% if not clients %}
+      <p class="muted">No clients yet. Create one below.</p>
+    {% else %}
+    <table>
+      <tr><th>Client</th><th>Spent</th><th>Cap</th><th>Left</th><th></th></tr>
+      {% for c in clients %}
+      <tr>
+        <td><a href="/clients/{{ c.id }}">{{ c.name }}</a></td>
+        <td>${{ '%.2f'|format(c.spent) }}{% if c.pending %}
+            <span class="muted">(${{ '%.2f'|format(c.pending) }} in flight)</span>{% endif %}</td>
+        <td>${{ '%.2f'|format(c.monthly_budget_cap) }}</td>
+        <td class="{{ 'hot' if c.remaining <= 0 else '' }}">${{ '%.2f'|format(c.remaining) }}</td>
+        <td class="barcell">
+          <div class="bar"><i style="width:{{ [c.pct, 100]|min }}%"
+               class="{{ 'hot' if c.pct >= 90 else ('warm' if c.pct >= 70 else '') }}"></i></div>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+    <details><summary>New client</summary>
+      <form class="stack" data-post="/api/clients">
+        <input name="name" placeholder="Client name" required>
+        <input name="contact_info" placeholder="Contact (optional)">
+        <label>Monthly cap (USD)<input name="monthly_budget_cap" type="number" step="0.01" value="50" required></label>
+        <label>Default per-job cap (USD, 0 = none)<input name="default_job_cap" type="number" step="0.01" value="0"></label>
+        <button>Create client</button>
+      </form>
+    </details>
+  </div>
+
+  <div class="card">
+    <h2>Personas</h2>
+    {% if not personas %}
+      <p class="muted">No personas yet.</p>
+    {% else %}
+    <table>
+      <tr><th>Persona</th><th>Client</th><th>Identity lock</th></tr>
+      {% for p in personas %}
+      <tr>
+        <td>{{ p.name }}</td><td>{{ p.client_name }}</td>
+        <td><span class="pill">{{ p.identity_strategy }}</span></td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+    <details><summary>New persona</summary>
+      <form class="stack" data-post="/api/personas">
+        <label>Client
+          <select name="client_id" required>
+            {% for c in clients %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+          </select>
+        </label>
+        <input name="name" placeholder="Persona name" required>
+        <label>Identity strategy
+          <select name="identity_strategy">
+            <option value="reference_image">reference_image — locked still (simplest)</option>
+            <option value="lora">lora — trained character model (strongest)</option>
+            <option value="character_id">character_id — provider-side handle</option>
+          </select>
+        </label>
+        <input name="reference_image_url" placeholder="Locked reference image URL">
+        <input name="identity_lock_id" placeholder="LoRA path / character id (if applicable)">
+        <input name="notes" placeholder="Appearance notes — fed into every prompt">
+        <button>Create persona</button>
+      </form>
+    </details>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Jobs</h2>
+  <details><summary>New job</summary>
+    <form class="stack" data-post="/api/jobs">
+      <label>Persona
+        <select name="persona_id" required>
+          {% for p in personas %}
+            <option value="{{ p.id }}">{{ p.client_name }} — {{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <textarea name="brief" rows="3" required
+        placeholder='Brief. Put the spoken line in quotes: She unboxes the serum and says "my skin has never looked better"'></textarea>
+      <div class="row">
+        <label>Platform
+          <select name="platform">
+            <option>tiktok</option><option>instagram</option>
+            <option>shorts</option><option>youtube</option>
+          </select>
+        </label>
+        <label>Duration (s)<input name="target_duration" type="number" value="8" min="1" max="120"></label>
+        <label>Job cap (USD, 0 = client default)<input name="job_budget_cap" type="number" step="0.01" value="0"></label>
+      </div>
+      <button>Create job</button>
+    </form>
+  </details>
+
+  {% if not jobs %}
+    <p class="muted">No jobs yet.</p>
+  {% else %}
+  <table>
+    <tr><th>#</th><th>Client / Persona</th><th>Brief</th><th>Status</th><th>Spend</th><th></th></tr>
+    {% for j in jobs %}
+    <tr>
+      <td>{{ j.id }}</td>
+      <td>{{ j.client_name }} — {{ j.persona_name }}</td>
+      <td class="brief">{{ j.brief[:70] }}{% if j.brief|length > 70 %}…{% endif %}</td>
+      <td><span class="status s-{{ j.status }}">{{ j.status }}</span></td>
+      <td>${{ '%.2f'|format(j.spend) }}</td>
+      <td><a class="btn" href="/jobs/{{ j.id }}">Open</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</section>
+
+{% endblock %}

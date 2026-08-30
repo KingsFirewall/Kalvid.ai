@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Job {{ job.id }} — Kalvid AI{% endblock %}
+{% block body %}
+
+<a class="back" href="/">← Dashboard</a>
+
+<section class="card">
+  <div class="head">
+    <h2>Job {{ job.id }} — {{ job.client_name }} / {{ job.persona_name }}</h2>
+    <span class="status s-{{ job.status }}">{{ job.status }}</span>
+  </div>
+  <p class="brief">{{ job.brief }}</p>
+  <p class="muted">{{ job.platform }} · {{ job.target_duration }}s ·
+     identity lock: <span class="pill">{{ job.identity_strategy }}</span></p>
+</section>
+
+<!-- The gate: cost is shown BEFORE the button that spends it. -->
+<section class="card">
+  <h2>Next step</h2>
+  <div class="stages">
+    {% for stage in ['draft', 'final'] %}
+      {% set p = preview.get(stage) %}
+      <div class="stage">
+        <h3>{{ stage }}</h3>
+        {% if p.error %}
+          <p class="hot">{{ p.error }}</p>
+        {% else %}
+          <p class="cost">${{ '%.4f'|format(p.estimate_usd) }}</p>
+          <p class="muted">{{ p.model }}
+             {% if not p.billable %}
+               <span class="pill ok">dry run — charged $0</span>
+             {% else %}via {{ p.provider }}{% endif %}
+             {% if not p.rate_verified %}
+               <span class="pill hot">price unverified</span>
+             {% endif %}</p>
+          {% for b in p.budget %}
+            <p class="{{ 'hot' if b.would_exceed else 'muted' }}">
+              {{ b.scope }} cap ${{ '%.2f'|format(b.cap) }} ·
+              ${{ '%.2f'|format(b.remaining) }} left
+              {% if b.would_exceed %}— WOULD EXCEED{% endif %}
+            </p>
+          {% endfor %}
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+
+  {% if preview.gate %}
+    <p class="{{ 'muted' if preview.gate.effective else 'hot' }}">
+      {{ preview.gate.note }}
+    </p>
+  {% endif %}
+
+  <div class="actions">
+    {% if job.status in ['created', 'draft_ready', 'failed'] %}
+      <button class="btn" data-action="/api/jobs/{{ job.id }}/draft">
+        {{ 'Re-draft' if job.status == 'draft_ready' else 'Generate draft' }} (cheap)
+      </button>
+    {% endif %}
+
+    {% if job.status == 'draft_ready' %}
+      <button class="btn btn-spend"
+              data-action="/api/jobs/{{ job.id }}/approve"
+              data-confirm="Approve the FULL-PRICE render for job {{ job.id }}?
+Estimated ${{ '%.2f'|format(preview.final.estimate_usd or 0) }}.">
+        Approve final render (${{ '%.2f'|format(preview.final.estimate_usd or 0) }})
+        {% if not preview.final.billable %} — dry run{% endif %}
+      </button>
+    {% elif job.status not in ['complete', 'rejected'] %}
+      <button class="btn" disabled title="A reviewed draft is required first">
+        Approve final render — needs a draft
+      </button>
+    {% endif %}
+
+    {% if job.status not in ['complete', 'rejected'] %}
+      <button class="btn btn-quiet" data-action="/api/jobs/{{ job.id }}/reject"
+              data-confirm="Kill job {{ job.id }}? No further spend.">Reject</button>
+    {% endif %}
+
+    {% if job.status in ['drafting', 'rendering', 'approved'] %}
+      <span class="spinner" data-poll="8">working… this page refreshes</span>
+    {% endif %}
+  </div>
+</section>
+
+<section class="card">
+  <h2>Generations — ${{ '%.4f'|format(job.cost.total_usd) }} total</h2>
+  {% if not job.generations %}
+    <p class="muted">Nothing generated yet. Nothing spent.</p>
+  {% else %}
+  <table>
+    <tr><th>#</th><th>Stage</th><th>Provider / model</th><th>Status</th>
+        <th>Est.</th><th>Actual</th><th>Output</th></tr>
+    {% for g in job.generations %}
+    <tr>
+      <td>{{ g.id }}</td>
+      <td><span class="pill {{ 'spend' if g.stage == 'final' else '' }}">{{ g.stage }}</span></td>
+      <td>{{ g.provider }} · {{ g.model }}</td>
+      <td><span class="status s-{{ g.status }}">{{ g.status }}</span>
+          {% if g.error %}<br><small class="hot">{{ g.error[:120] }}</small>{% endif %}</td>
+      <td>${{ '%.4f'|format(g.estimated_cost_usd) }}</td>
+      <td>{% if g.actual_cost_usd is not none %}${{ '%.4f'|format(g.actual_cost_usd) }}
+          {% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>{% if g.output_url %}<a href="{{ g.output_url }}" target="_blank">open</a>
+          {% else %}<span class="muted">—</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Structured prompt</h2>
+  <p class="muted">Expanded from the brief before it reaches any provider.</p>
+  <pre>{{ job.structured_prompt.prompt }}</pre>
+  <details><summary>All fields</summary><pre>{{ prompt_json }}</pre></details>
+</section>
+
+{% endblock %}
