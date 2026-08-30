@@ -68,7 +68,13 @@ def month_bounds(today: date | None = None) -> tuple[str, str]:
 
 
 def client_spend(client_id: int, today: date | None = None) -> tuple[float, float]:
-    """(total_committed, of_which_still_pending) for the client this calendar month."""
+    """(total_committed, of_which_still_pending) for the client this calendar month.
+
+    Reads generations.client_id directly. This used to join out through
+    jobs -> personas, which meant any generation without a job — a standalone still
+    for an influencer or an ad — contributed nothing to the total and so could be
+    spent past the cap without the guard ever seeing it.
+    """
     start, end = month_bounds(today)
     row = db.query_one(
         f"""
@@ -76,9 +82,7 @@ def client_spend(client_id: int, today: date | None = None) -> tuple[float, floa
                COALESCE(SUM(CASE WHEN g.status IN ('pending','running')
                                  THEN {_COST_EXPR} ELSE 0 END), 0) AS pending
           FROM generations g
-          JOIN jobs     j ON j.id = g.job_id
-          JOIN personas p ON p.id = j.persona_id
-         WHERE p.client_id = ?
+         WHERE g.client_id = ?
            AND g.status IN {_COMMITTED_SQL}
            AND g.created_at >= ? AND g.created_at < ?
         """,
@@ -97,10 +101,54 @@ def job_spend(job_id: int) -> float:
     return round(row["total"], 6)
 
 
+@dataclass
+class Scope:
+    """Who this spend is charged to, and under which caps.
+
+    A video generation has a job (and therefore a per-job cap). A standalone still
+    has only a client. Both must reach the same guard.
+    """
+    client_id: int
+    client_cap: float
+    job_id: int | None = None
+    persona_id: int | None = None
+    job_cap: float = 0.0
+
+
+def scope_for_job(job_id: int) -> Scope:
+    ctx = _job_context(job_id)
+    return Scope(
+        client_id=ctx["client_id"], client_cap=ctx["monthly_budget_cap"],
+        job_id=job_id, persona_id=ctx["persona_id"],
+        job_cap=ctx["job_budget_cap"] or ctx["default_job_cap"],
+    )
+
+
+def scope_for_client(client_id: int, persona_id: int | None = None) -> Scope:
+    """Charge a still to a client directly. No job, so no per-job cap applies —
+    the client's monthly cap is the only thing standing between you and the bill."""
+    row = db.query_one("SELECT * FROM clients WHERE id=?", (client_id,))
+    if row is None:
+        raise KeyError(f"client {client_id} not found")
+    if persona_id is not None:
+        owner = db.query_one("SELECT client_id FROM personas WHERE id=?", (persona_id,))
+        if owner is None:
+            raise KeyError(f"persona {persona_id} not found")
+        if owner["client_id"] != client_id:
+            # Otherwise a still could be billed to one client while being saved as
+            # another client's asset.
+            raise ValueError(
+                f"persona {persona_id} belongs to client {owner['client_id']}, "
+                f"not {client_id}")
+    return Scope(client_id=client_id, client_cap=row["monthly_budget_cap"],
+                 persona_id=persona_id)
+
+
 def _job_context(job_id: int):
     row = db.query_one(
         """SELECT j.id AS job_id, j.job_budget_cap, j.target_duration,
-                  p.client_id, c.monthly_budget_cap, c.default_job_cap, c.name AS client_name
+                  j.persona_id, p.client_id, c.monthly_budget_cap, c.default_job_cap,
+                  c.name AS client_name
              FROM jobs j
              JOIN personas p ON p.id = j.persona_id
              JOIN clients  c ON c.id = p.client_id
@@ -112,45 +160,55 @@ def _job_context(job_id: int):
     return row
 
 
-def check(job_id: int, estimate: float) -> list[BudgetStatus]:
-    """Both caps that apply to this spend, client-level first."""
-    ctx = _job_context(job_id)
-    spent, pending = client_spend(ctx["client_id"])
-    statuses = [
-        BudgetStatus("client", ctx["monthly_budget_cap"], spent, pending, estimate)
-    ]
-    job_cap = ctx["job_budget_cap"] or ctx["default_job_cap"]
-    if job_cap:
-        statuses.append(BudgetStatus("job", job_cap, job_spend(job_id), 0.0, estimate))
+def check_scope(scope: Scope, estimate: float) -> list[BudgetStatus]:
+    """Every cap that applies to this spend, client-level first."""
+    spent, pending = client_spend(scope.client_id)
+    statuses = [BudgetStatus("client", scope.client_cap, spent, pending, estimate)]
+    if scope.job_id is not None and scope.job_cap:
+        statuses.append(
+            BudgetStatus("job", scope.job_cap, job_spend(scope.job_id), 0.0, estimate))
     return statuses
+
+
+def check(job_id: int, estimate: float) -> list[BudgetStatus]:
+    """Both caps that apply to a job's spend, client-level first."""
+    return check_scope(scope_for_job(job_id), estimate)
 
 
 def reserve(
     *,
-    job_id: int,
     stage: str,
     rate: Rate,
     duration_s: float,
+    job_id: int | None = None,
+    scope: Scope | None = None,
     variant: str | None = None,
+    calls: int = 1,
     payload: str = "",
     billable: bool = True,
     override_by: str | None = None,
 ) -> int:
     """Claim budget and open a pending ledger row. Returns generation_id.
 
+    Pass either `job_id` (a draft or final render) or `scope` (a standalone still).
+    Both take the same lock and hit the same cap.
+
     Raises BudgetExceeded unless override_by is set (an explicit, logged human decision).
     Raises UnverifiedRate if a billable call would ride on a placeholder price.
     """
     if billable:
         rate_table.require_billable(rate)
+    if scope is None:
+        if job_id is None:
+            raise ValueError("reserve() needs either job_id or scope")
+        scope = scope_for_job(job_id)
 
-    estimate = rate.estimate(duration_s=duration_s, variant=variant)
-    ctx = _job_context(job_id)
+    estimate = rate.estimate(duration_s=duration_s, calls=calls, variant=variant)
 
     # Serialised per client, so the read-then-reserve below cannot interleave with
     # another approval slipping under the same cap. See db.exclusive().
-    with db.exclusive(ctx["client_id"]) as conn:
-        statuses = check(job_id, estimate)
+    with db.exclusive(scope.client_id) as conn:
+        statuses = check_scope(scope, estimate)
         breached = [s for s in statuses if s.would_exceed]
 
         if breached and not override_by:
@@ -160,7 +218,7 @@ def reserve(
                        (client_id, job_id, amount_usd, running_total, cap_at_time,
                         scope, blocked, note)
                        VALUES (?,?,?,?,?,?,1,?)"""),
-                    (ctx["client_id"], job_id, estimate, s.spent, s.cap, s.scope,
+                    (scope.client_id, scope.job_id, estimate, s.spent, s.cap, s.scope,
                      f"blocked {stage} via {rate.key}"),
                 )
             conn.commit()
@@ -168,10 +226,11 @@ def reserve(
             raise BudgetExceeded(s.scope, s.spent, s.estimate, s.cap)
 
         sql = ("""INSERT INTO generations
-                  (job_id, stage, provider, model, request_payload, status,
-                   estimated_cost_usd)
-                  VALUES (?,?,?,?,?, 'pending', ?)""")
-        args = (job_id, stage, rate.provider, rate.model, payload, estimate)
+                  (job_id, persona_id, client_id, stage, provider, model,
+                   request_payload, status, estimated_cost_usd)
+                  VALUES (?,?,?,?,?,?,?, 'pending', ?)""")
+        args = (scope.job_id, scope.persona_id, scope.client_id, stage,
+                rate.provider, rate.model, payload, estimate)
         if db.BACKEND == "postgres":
             gen_id = conn.execute(db.translate(sql) + " RETURNING id", args).fetchone()["id"]
         else:
@@ -183,8 +242,8 @@ def reserve(
                    (client_id, generation_id, job_id, amount_usd, running_total,
                     cap_at_time, scope, blocked, overridden_by, note)
                    VALUES (?,?,?,?,?,?,?,0,?,?)"""),
-                (ctx["client_id"], gen_id, job_id, estimate, s.spent, s.cap, s.scope,
-                 override_by,
+                (scope.client_id, gen_id, scope.job_id, estimate, s.spent, s.cap,
+                 s.scope, override_by,
                  f"{'OVERRIDE ' if override_by and s.would_exceed else ''}reserved "
                  f"{stage} via {rate.key}"),
             )
@@ -236,17 +295,15 @@ def settle(
         "drift_warning": abs(drift_pct) > settings.cost_drift_warn_pct,
     }
     if report["drift_warning"]:
+        # Read the client off the generation row: a still has no job to join through.
         db.execute(
             """INSERT INTO budget_events
                (client_id, generation_id, job_id, amount_usd, running_total,
                 cap_at_time, scope, blocked, note)
-               SELECT p.client_id, ?, j.id, ?, 0, 0, 'client', 0, ?
-                 FROM jobs j JOIN personas p ON p.id = j.persona_id
-                WHERE j.id = ?""",
-            (gen_id, cost,
+               VALUES (?,?,?,?,0,0,'client',0,?)""",
+            (row["client_id"], gen_id, row["job_id"], cost,
              f"COST DRIFT {drift_pct:+.1f}%: estimated ${est:.4f}, charged ${cost:.4f} "
-             f"— re-verify this rate in rates.json",
-             row["job_id"]),
+             f"— re-verify this rate in rates.json"),
         )
     return report
 

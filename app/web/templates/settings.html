@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Settings — Kalvid AI{% endblock %}
+{% block body %}
+
+<header class="pt-2">
+  <h2 class="font-headline-lg text-[26px] md:text-headline-lg text-on-surface">Settings</h2>
+  <p class="font-body-md text-body-md text-on-surface-variant mt-1.5">
+    Read-only. These come from <code class="text-[13px] text-primary">.env</code> and are
+    applied at startup — deliberately not clickable from a browser with no auth in front of it.
+  </p>
+</header>
+
+<!-- Spend mode -->
+<section class="glass-panel rounded-2xl p-6">
+  <div class="flex flex-col sm:flex-row sm:items-center gap-5">
+    <div class="w-14 h-14 rounded-xl grid place-items-center shrink-0
+         {{ 'bg-ok/15 border border-ok/30' if status.dry_run else 'bg-danger/15 border border-danger/30' }}">
+      <span class="material-symbols-outlined text-[26px] {{ 'text-ok' if status.dry_run else 'text-danger' }}">
+        {{ 'shield' if status.dry_run else 'payments' }}
+      </span>
+    </div>
+    <div class="flex-1">
+      <h3 class="font-headline-md text-[19px] text-on-surface">
+        {{ 'Dry run — nothing is billable' if status.dry_run else 'LIVE — generations are billable' }}
+      </h3>
+      <p class="text-[13px] text-on-surface-variant mt-1 leading-relaxed">
+        {% if status.dry_run %}
+          Every generation is routed to the local mock provider. Estimates still show the
+          real price, so the caps rehearse exactly what they'll do live.
+          Set <code class="text-primary">KALVID_DRY_RUN=false</code> to go live.
+        {% else %}
+          Every draft and render is charged to your provider accounts. Set
+          <code class="text-primary">KALVID_DRY_RUN=true</code> to stop spending.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+</section>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+  <section class="glass-panel rounded-2xl p-5">
+    <h3 class="font-headline-md text-[16px] text-on-surface mb-4">Providers</h3>
+    <div class="space-y-2.5">
+      {% for name, ok in status.providers.items() %}
+      <div class="flex items-center justify-between rounded-lg bg-white/[0.03] px-4 py-3">
+        <span class="text-[13.5px] text-on-surface font-medium">{{ name }}</span>
+        <span class="chip {{ 'chip-ok' if ok else '' }}">
+          <span class="w-1.5 h-1.5 rounded-full {{ 'bg-ok' if ok else 'bg-on-surface-variant' }}"></span>
+          {{ 'configured' if ok else 'no API key' }}
+        </span>
+      </div>
+      {% endfor %}
+      <div class="flex items-center justify-between rounded-lg bg-white/[0.03] px-4 py-3">
+        <span class="text-[13.5px] text-on-surface font-medium">Supabase Storage</span>
+        <span class="chip {{ 'chip-ok' if status.supabase_storage else 'chip-warn' }}">
+          <span class="w-1.5 h-1.5 rounded-full {{ 'bg-ok' if status.supabase_storage else 'bg-warn' }}"></span>
+          {{ 'connected' if status.supabase_storage else 'local disk only' }}
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="glass-panel rounded-2xl p-5">
+    <h3 class="font-headline-md text-[16px] text-on-surface mb-4">Runtime</h3>
+    <dl class="space-y-2.5 text-[13px]">
+      {% for label, value in rows %}
+      <div class="flex items-center justify-between gap-3 rounded-lg bg-white/[0.03] px-4 py-3">
+        <dt class="text-on-surface-variant">{{ label }}</dt>
+        <dd class="text-on-surface font-medium text-right break-all">{{ value }}</dd>
+      </div>
+      {% endfor %}
+    </dl>
+  </section>
+</div>
+
+<!-- Price health -->
+<section class="glass-panel rounded-2xl p-5">
+  <div class="flex items-center justify-between gap-3 mb-4">
+    <div>
+      <h3 class="font-headline-md text-[16px] text-on-surface">Price table health</h3>
+      <p class="text-[12.5px] text-on-surface-variant mt-0.5">A cap computed from a made-up price is not a cap.</p>
+    </div>
+    <a href="/rates" class="chip chip-primary hover:brightness-125">Open rates</a>
+  </div>
+  {% if status.unverified_rates or status.stale_rates %}
+    <div class="space-y-2">
+      {% for k in status.unverified_rates %}
+        <div class="flex items-center gap-2 rounded-lg border border-danger/25 bg-danger/[0.06] px-4 py-2.5 text-[12.5px] text-danger">
+          <span class="material-symbols-outlined text-[17px]">error</span>
+          <code>{{ k }}</code> — never verified, live calls refused
+        </div>
+      {% endfor %}
+      {% for k in status.stale_rates %}
+        {% if k not in status.unverified_rates %}
+        <div class="flex items-center gap-2 rounded-lg border border-warn/25 bg-warn/[0.06] px-4 py-2.5 text-[12.5px] text-warn">
+          <span class="material-symbols-outlined text-[17px]">schedule</span>
+          <code>{{ k }}</code> — stale, re-verify the price
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="flex items-center gap-2 rounded-lg border border-ok/25 bg-ok/[0.06] px-4 py-2.5 text-[12.5px] text-ok">
+      <span class="material-symbols-outlined text-[17px]">verified</span>
+      Every rate is verified and current.
+    </div>
+  {% endif %}
+</section>
+
+{% endblock %}

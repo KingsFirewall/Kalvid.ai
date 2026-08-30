@@ -1,60 +1,100 @@
 {% extends "base.html" %}
 {% block title %}{{ data.client.name }} — Kalvid AI{% endblock %}
 {% block body %}
-<a class="back" href="/">← Dashboard</a>
 
-<section class="card">
-  <h2>{{ data.client.name }}</h2>
-  <p class="muted">Period {{ data.period.start }} → {{ data.period.end }}</p>
-  <div class="stats">
-    <div><span>Spent</span><strong>${{ '%.2f'|format(data.spent_this_month) }}</strong></div>
-    <div><span>In flight</span><strong>${{ '%.2f'|format(data.pending) }}</strong></div>
-    <div><span>Cap</span><strong>${{ '%.2f'|format(data.cap) }}</strong></div>
-    <div><span>Remaining</span>
-         <strong class="{{ 'hot' if data.remaining <= 0 else '' }}">${{ '%.2f'|format(data.remaining) }}</strong></div>
+{% set pct = (100 * data.spent_this_month / data.cap) if data.cap else 0 %}
+
+<header class="pt-2">
+  <a href="/clients" class="inline-flex items-center gap-1 text-[13px] text-on-surface-variant hover:text-primary mb-2">
+    <span class="material-symbols-outlined text-[16px]">arrow_back</span> Budgets
+  </a>
+  <h2 class="font-headline-lg text-[26px] md:text-headline-lg text-on-surface">{{ data.client.name }}</h2>
+  <p class="text-[13px] text-on-surface-variant mt-1.5">
+    Calendar month {{ data.period.start[:10] }} → {{ data.period.end[:10] }}
+    {% if data.client.contact_info %} · {{ data.client.contact_info }}{% endif %}
+  </p>
+</header>
+
+<section class="glass-panel rounded-2xl p-6">
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+    {% for label, value, tone in [
+        ('Spent', data.spent_this_month, 'text-on-surface'),
+        ('In flight', data.pending, 'text-spend'),
+        ('Cap', data.cap, 'text-on-surface-variant'),
+        ('Remaining', data.remaining, 'text-danger' if data.remaining <= 0 else 'text-ok')] %}
+    <div>
+      <div class="font-label-md text-[11px] uppercase tracking-wider text-on-surface-variant mb-1.5">{{ label }}</div>
+      <div class="font-headline-lg text-[26px] tabular-nums {{ tone }}">${{ '%.2f'|format(value) }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="meter">
+    <i class="{{ 'hot' if pct >= 90 else ('warm' if pct >= 70 else '') }}" style="width:{{ [pct, 100]|min }}%"></i>
+  </div>
+  <div class="flex justify-between text-[11.5px] text-on-surface-variant mt-2 tabular-nums">
+    <span>{{ '%.1f'|format(pct) }}% of cap used</span>
+    <span>per-job cap: {{ '$%.2f'|format(data.client.default_job_cap) if data.client.default_job_cap else 'none' }}</span>
   </div>
 </section>
 
-<section class="card">
-  <h2>Every paid call this month</h2>
-  {% if not data.generations %}<p class="muted">No spend recorded.</p>{% else %}
-  <table>
-    <tr><th>#</th><th>Job</th><th>Persona</th><th>Stage</th><th>Provider</th>
-        <th>Status</th><th>Cost</th><th>When</th></tr>
-    {% for g in data.generations %}
-    <tr>
-      <td>{{ g.id }}</td>
-      <td><a href="/jobs/{{ g.job }}">{{ g.job }}</a></td>
-      <td>{{ g.persona }}</td>
-      <td><span class="pill {{ 'spend' if g.stage == 'final' else '' }}">{{ g.stage }}</span></td>
-      <td>{{ g.provider }}</td>
-      <td><span class="status s-{{ g.status }}">{{ g.status }}</span></td>
-      <td>${{ '%.4f'|format(g.effective_cost) }}</td>
-      <td class="muted">{{ g.created_at }}</td>
-    </tr>
-    {% endfor %}
-  </table>
+<section class="glass-panel rounded-2xl p-6">
+  <h3 class="font-headline-md text-[18px] text-on-surface mb-1">Every paid call this month</h3>
+  <p class="text-[12.5px] text-on-surface-variant mb-4">
+    Estimated before the call fires, reconciled after. A failed call still costs.
+  </p>
+  {% if not data.generations %}
+    <p class="text-[13px] text-on-surface-variant py-6 text-center">No spend recorded.</p>
+  {% else %}
+  <div class="overflow-x-auto">
+    <table class="data min-w-[760px]">
+      <thead><tr><th>#</th><th>Job</th><th>Persona</th><th>Stage</th><th>Provider</th><th>Status</th><th>Cost</th><th>When</th></tr></thead>
+      <tbody>
+      {% for g in data.generations %}
+      <tr>
+        <td class="text-on-surface-variant tabular-nums">{{ g.id }}</td>
+        <td><a href="/jobs/{{ g.job }}" class="text-primary hover:brightness-125">#{{ g.job }}</a></td>
+        <td class="text-[12.5px]">{{ g.persona }}</td>
+        <td><span class="chip {{ 'chip-spend' if g.stage == 'final' else '' }}">{{ g.stage }}</span></td>
+        <td class="text-on-surface-variant text-[12px]">{{ g.provider }}</td>
+        <td><span class="chip s-{{ g.status }}">{{ g.status }}</span></td>
+        <td class="tabular-nums">${{ '%.4f'|format(g.effective_cost) }}</td>
+        <td class="text-on-surface-variant text-[12px] whitespace-nowrap">{{ g.created_at }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% endif %}
 </section>
 
-<section class="card">
-  <h2>Budget audit log</h2>
-  {% if not data.budget_events %}<p class="muted">Nothing yet.</p>{% else %}
-  <table>
-    <tr><th>When</th><th>Scope</th><th>Amount</th><th>Running</th><th>Cap</th><th>Note</th></tr>
-    {% for e in data.budget_events %}
-    <tr class="{{ 'blocked' if e.blocked else '' }}">
-      <td class="muted">{{ e.created_at }}</td>
-      <td>{{ e.scope }}</td>
-      <td>${{ '%.4f'|format(e.amount_usd) }}</td>
-      <td>${{ '%.2f'|format(e.running_total) }}</td>
-      <td>${{ '%.2f'|format(e.cap_at_time) }}</td>
-      <td>{% if e.blocked %}<span class="pill hot">BLOCKED</span> {% endif %}
-          {% if e.overridden_by %}<span class="pill warm">override: {{ e.overridden_by }}</span> {% endif %}
-          {{ e.note }}</td>
-    </tr>
-    {% endfor %}
-  </table>
+<section class="glass-panel rounded-2xl p-6">
+  <h3 class="font-headline-md text-[18px] text-on-surface mb-1">Budget audit log</h3>
+  <p class="text-[12.5px] text-on-surface-variant mb-4">Exceeding a cap requires a named override, and it is recorded here.</p>
+  {% if not data.budget_events %}
+    <p class="text-[13px] text-on-surface-variant py-6 text-center">Nothing yet.</p>
+  {% else %}
+  <div class="overflow-x-auto">
+    <table class="data min-w-[640px]">
+      <thead><tr><th>When</th><th>Scope</th><th>Amount</th><th>Running</th><th>Cap</th><th>Note</th></tr></thead>
+      <tbody>
+      {% for e in data.budget_events %}
+      <tr class="{{ 'blocked' if e.blocked else '' }}">
+        <td class="text-on-surface-variant text-[12px] whitespace-nowrap">{{ e.created_at }}</td>
+        <td><span class="chip">{{ e.scope }}</span></td>
+        <td class="tabular-nums">${{ '%.4f'|format(e.amount_usd) }}</td>
+        <td class="tabular-nums text-on-surface-variant">${{ '%.2f'|format(e.running_total) }}</td>
+        <td class="tabular-nums text-on-surface-variant">${{ '%.2f'|format(e.cap_at_time) }}</td>
+        <td class="text-[12px]">
+          {% if e.blocked %}<span class="chip chip-danger">BLOCKED</span> {% endif %}
+          {% if e.overridden_by %}<span class="chip chip-warn">override: {{ e.overridden_by }}</span> {% endif %}
+          <span class="text-on-surface-variant">{{ e.note }}</span>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% endif %}
 </section>
+
 {% endblock %}

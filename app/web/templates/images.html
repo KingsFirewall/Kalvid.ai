@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Image Studio — Kalvid AI{% endblock %}
+{% block body %}
+
+<header class="pt-2">
+  <h2 class="font-headline-lg text-[26px] md:text-headline-lg text-on-surface">Image Studio</h2>
+  <p class="font-body-md text-body-md text-on-surface-variant mt-1.5 max-w-3xl">
+    Build an influencer's face, then a library of stills you can reuse. Every image
+    you keep becomes a reference you never have to upload again.
+  </p>
+</header>
+
+{% if not clients %}
+  <div class="glass-panel rounded-2xl p-10 text-center">
+    <span class="material-symbols-outlined text-[44px] text-on-surface-variant/40">account_balance_wallet</span>
+    <h3 class="font-headline-md text-[19px] text-on-surface mt-3 mb-1.5">Add a client first</h3>
+    <p class="text-[13.5px] text-on-surface-variant max-w-md mx-auto mb-6">
+      Images cost money — a little, but not nothing — so every one is charged to a
+      client's monthly cap.
+    </p>
+    <a href="/clients" class="btn-primary inline-flex items-center gap-2 rounded-lg px-5 py-3 text-white text-label-md font-label-md">
+      <span class="material-symbols-outlined text-[19px]">add_circle</span> Add a client
+    </a>
+  </div>
+{% else %}
+
+<form id="image-form" data-post="/api/images" class="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-md items-start">
+
+  <div class="space-y-md min-w-0">
+    <!-- Who is this for -->
+    <section class="glass-panel rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="material-symbols-outlined text-[20px] text-secondary">face</span>
+        <h3 class="font-headline-md text-[17px] text-on-surface">Who is this for?</h3>
+      </div>
+      <p class="text-[12.5px] text-on-surface-variant mb-4">
+        Pick an influencer to file the image under them, or generate an unattached
+        product / ad still.
+      </p>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {% for p in personas %}
+        <label class="relative flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-3 cursor-pointer transition-all hover:border-primary/40 hover:bg-white/[0.05]">
+          <input type="radio" name="target" value="persona:{{ p.id }}" class="peer sr-only"
+                 data-has-face="{{ 1 if p.reference_image_url else 0 }}" {{ 'checked' if loop.first }}>
+          <span class="absolute inset-0 rounded-xl border-2 border-primary opacity-0 peer-checked:opacity-100 pointer-events-none transition-opacity"></span>
+          {{ ui.avatar(p, 'w-12 h-12') }}
+          <span class="min-w-0">
+            <span class="block font-semibold text-[14px] text-on-surface truncate">{{ p.name }}</span>
+            <span class="block text-[11.5px] text-on-surface-variant truncate">{{ p.client_name }}</span>
+          </span>
+        </label>
+        {% endfor %}
+
+        {% for c in clients %}
+        <label class="relative flex items-center gap-3 rounded-xl border border-dashed border-white/12 bg-white/[0.02] p-3 cursor-pointer transition-all hover:border-tertiary/40 hover:bg-white/[0.05]">
+          <input type="radio" name="target" value="client:{{ c.id }}" class="peer sr-only" data-has-face="0"
+                 {{ 'checked' if not personas and loop.first }}>
+          <span class="absolute inset-0 rounded-xl border-2 border-tertiary opacity-0 peer-checked:opacity-100 pointer-events-none transition-opacity"></span>
+          <span class="w-12 h-12 rounded-lg grid place-items-center bg-tertiary/12 border border-tertiary/25 shrink-0">
+            <span class="material-symbols-outlined text-[20px] text-tertiary">inventory_2</span>
+          </span>
+          <span class="min-w-0">
+            <span class="block font-semibold text-[14px] text-on-surface truncate">Ad / product still</span>
+            <span class="block text-[11.5px] text-on-surface-variant truncate">{{ c.name }} · no persona</span>
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+    </section>
+
+    <!-- Prompt -->
+    <section class="glass-panel rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="material-symbols-outlined text-[20px] text-primary">edit_note</span>
+        <h3 class="font-headline-md text-[17px] text-on-surface">Describe the image</h3>
+      </div>
+      <p class="text-[12.5px] text-on-surface-variant mb-4">
+        Say the face, the framing and the light. Vertical 9:16 by default, which is what a video needs.
+      </p>
+      <textarea name="prompt" rows="4" required class="field text-[15px] leading-relaxed"
+        placeholder="24-year-old woman with curly dark hair and freckles, natural makeup, soft window light, plain bathroom background, shot on a phone, chest-up"></textarea>
+
+      <div class="flex flex-wrap gap-2 mt-3">
+        {% for hint in ['soft window light', 'plain background', 'chest-up framing',
+                        'shot on a phone', 'no heavy filter', 'natural makeup'] %}
+          <button type="button" class="chip hover:brightness-125" data-append="{{ hint }}">
+            <span class="material-symbols-outlined text-[13px]">add</span>{{ hint }}
+          </button>
+        {% endfor %}
+      </div>
+    </section>
+
+    <!-- Results -->
+    <section class="glass-panel rounded-2xl p-5">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[19px] text-tertiary">photo_library</span>
+          <h3 class="font-headline-md text-[17px] text-on-surface">Recent images</h3>
+        </div>
+        {% if pending %}
+          <span class="chip chip-warn" data-poll="5">
+            <span class="w-1.5 h-1.5 rounded-full bg-current progress-pulse"></span>
+            {{ pending }} generating
+          </span>
+        {% endif %}
+      </div>
+
+      {% if not assets %}
+        <div class="rounded-xl border border-dashed border-white/15 px-5 py-10 text-center">
+          <span class="material-symbols-outlined text-[32px] text-on-surface-variant/40">image</span>
+          <p class="text-[13.5px] text-on-surface mt-2.5">No images yet</p>
+          <p class="text-[12px] text-on-surface-variant mt-1">Generated stills appear here and stay reusable.</p>
+        </div>
+      {% else %}
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {% for a in assets %}
+          <div class="relative rounded-xl overflow-hidden border {{ 'border-primary/60' if a.is_primary else 'border-white/10' }} group bg-surface-container-lowest">
+            <img src="{{ a.url }}" alt="{{ (a.prompt or '')[:80] }}" loading="lazy"
+                 class="w-full aspect-[9/16] object-cover">
+            {% if a.is_primary %}
+              <span class="chip chip-primary absolute top-2 left-2 backdrop-blur-md">
+                <span class="material-symbols-outlined text-[13px]">lock</span> locked face
+              </span>
+            {% endif %}
+            <div class="absolute inset-x-0 bottom-0 p-2 flex items-center gap-1.5 bg-gradient-to-t from-black/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+              {% if a.persona_id and not a.is_primary %}
+                <button type="button" data-action="/api/assets/{{ a.id }}/primary"
+                        data-confirm="Make this {{ a.persona_name }}'s locked face?&#10;&#10;Every future video for this persona will be seeded from it."
+                        title="Use as locked face"
+                        class="w-7 h-7 rounded-full grid place-items-center bg-white/12 backdrop-blur-md border border-white/25 text-white hover:bg-primary hover:text-on-primary">
+                  <span class="material-symbols-outlined text-[15px]">lock</span>
+                </button>
+              {% endif %}
+              <a href="{{ a.url }}" target="_blank" title="Open full size"
+                 class="w-7 h-7 rounded-full grid place-items-center bg-white/12 backdrop-blur-md border border-white/25 text-white hover:bg-white/30">
+                <span class="material-symbols-outlined text-[15px]">open_in_new</span>
+              </a>
+              {% if not a.is_primary %}
+                <button type="button" data-action="/api/assets/{{ a.id }}" data-method="DELETE"
+                        data-confirm="Delete this image from the library?&#10;&#10;The ledger entry stays — the money was spent either way."
+                        title="Delete"
+                        class="ml-auto w-7 h-7 rounded-full grid place-items-center bg-white/12 backdrop-blur-md border border-white/25 text-white hover:bg-danger hover:text-white">
+                  <span class="material-symbols-outlined text-[15px]">delete</span>
+                </button>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </section>
+  </div>
+
+  <!-- Cost + controls -->
+  <aside class="glass-panel rounded-2xl p-5 space-y-4 xl:sticky xl:top-6">
+    <div class="flex items-center gap-2">
+      <span class="material-symbols-outlined text-[20px] text-on-surface-variant">tune</span>
+      <h3 class="font-headline-md text-[17px] text-on-surface">Settings</h3>
+    </div>
+
+    <!-- The single most consequential control on this page. Getting it wrong doesn't
+         look like an error — it looks like a good photo of the wrong person. -->
+    <div>
+      <span class="field-label">Face</span>
+      <div class="space-y-2">
+        <label class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-3 cursor-pointer transition-all hover:border-white/25 has-[:checked]:border-primary has-[:checked]:bg-primary/[0.07]">
+          <input type="radio" name="keep_face" value="0" class="mt-0.5 accent-[#d0bcff]" checked>
+          <span>
+            <span class="block text-[13px] font-semibold text-on-surface">Create a new face</span>
+            <span class="block text-[11.5px] text-on-surface-variant leading-relaxed mt-0.5">
+              Text-to-image. Use this to invent an influencer, or for product stills.
+            </span>
+          </span>
+        </label>
+        <label id="keep-face-option" class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-3 cursor-pointer transition-all hover:border-white/25 has-[:checked]:border-primary has-[:checked]:bg-primary/[0.07]">
+          <input type="radio" name="keep_face" value="1" class="mt-0.5 accent-[#d0bcff]">
+          <span>
+            <span class="block text-[13px] font-semibold text-on-surface">Keep this influencer's face</span>
+            <span class="block text-[11.5px] text-on-surface-variant leading-relaxed mt-0.5">
+              Seeded from their locked reference. The only option that returns the
+              <em>same</em> person — and it costs 10&times; more.
+            </span>
+          </span>
+        </label>
+      </div>
+      <p id="no-face-note" class="hidden text-[11.5px] text-warn mt-2 flex items-start gap-1.5">
+        <span class="material-symbols-outlined text-[15px] shrink-0">info</span>
+        <span>This target has no locked face yet, so only a new face can be generated. Make one below, then set it as the reference.</span>
+      </p>
+    </div>
+
+    <div>
+      <label class="field-label" for="count">How many</label>
+      <select name="count" id="count" class="field">
+        {% for n in [1, 2, 4, 6, 8] %}
+          <option value="{{ n }}" {{ 'selected' if n == 4 }}>{{ n }} image{{ '' if n == 1 else 's' }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-[11.5px] text-on-surface-variant mt-1.5">
+        Each is reserved separately, so a batch that crosses the cap stops there.
+      </p>
+    </div>
+
+    <!-- Live estimate, refreshed from /api/images/preview whenever an input changes. -->
+    <div id="cost-box" class="rounded-xl border border-spend/25 bg-spend/[0.05] p-4">
+      <div class="font-label-md text-[11px] uppercase tracking-wider text-on-surface-variant mb-1">This costs</div>
+      <div class="font-headline-lg text-[28px] tabular-nums text-spend" id="cost-total">—</div>
+      <div class="text-[12px] text-on-surface-variant mt-1" id="cost-detail">calculating…</div>
+      <div class="text-[12px] mt-2 pt-2 border-t border-white/5 flex items-center justify-between">
+        <span class="text-on-surface-variant">client cap</span>
+        <span class="tabular-nums text-on-surface-variant" id="cost-budget">—</span>
+      </div>
+    </div>
+
+    <button type="submit" class="w-full btn-primary rounded-lg py-3.5 px-4 flex items-center justify-center gap-2 text-white text-label-md font-label-md">
+      <span class="material-symbols-outlined text-[19px]">auto_awesome</span> Generate
+    </button>
+    <p class="text-[11.5px] text-on-surface-variant text-center leading-relaxed">
+      Images spend straight away — no draft gate. At a fraction of a cent to a few cents
+      each, a preview of a preview would cost more than it saved.
+    </p>
+  </aside>
+</form>
+{% endif %}
+
+<script>
+// Live cost. The point of this page is that the price is on screen before the button
+// that spends it, exactly as on the video gate.
+(function () {
+  const form = document.getElementById('image-form');
+  if (!form) return;
+  const totalEl  = document.getElementById('cost-total');
+  const detailEl = document.getElementById('cost-detail');
+  const budgetEl = document.getElementById('cost-budget');
+  const noFace   = document.getElementById('no-face-note');
+  const keepOpt  = document.getElementById('keep-face-option');
+
+  function target() {
+    const el = form.querySelector('input[name=target]:checked');
+    if (!el) return null;
+    const [kind, id] = el.value.split(':');
+    return { kind, id: Number(id), hasFace: el.dataset.hasFace === '1' };
+  }
+
+  async function refresh() {
+    const t = target();
+    if (!t) return;
+    // A target with no locked reference cannot keep a face it does not have.
+    const canKeep = t.kind === 'persona' && t.hasFace;
+    keepOpt.classList.toggle('opacity-40', !canKeep);
+    keepOpt.classList.toggle('pointer-events-none', !canKeep);
+    keepOpt.querySelector('input').disabled = !canKeep;
+    if (!canKeep) form.querySelector('input[name=keep_face][value="0"]').checked = true;
+    noFace.classList.toggle('hidden', canKeep);
+
+    const body = {
+      prompt: 'x',
+      keep_face: form.querySelector('input[name=keep_face]:checked').value === '1',
+      count: Number(form.count.value),
+    };
+    body[t.kind === 'persona' ? 'persona_id' : 'client_id'] = t.id;
+
+    try {
+      const res = await fetch('/api/images/preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const d = await res.json();
+      if (!res.ok || d.error) {
+        totalEl.textContent = '—';
+        detailEl.textContent = d.error || (d.detail || 'could not price this');
+        return;
+      }
+      totalEl.textContent = '$' + d.estimate_total_usd.toFixed(4);
+      detailEl.textContent = `${body.count} x $${d.estimate_each_usd.toFixed(4)} · ${d.model}`
+        + (d.billable ? '' : ' · dry run, charged $0');
+      const b = d.budget && d.budget[0];
+      if (b) {
+        budgetEl.textContent = '$' + b.remaining.toFixed(2) + ' left';
+        budgetEl.classList.toggle('text-danger', b.would_exceed);
+        budgetEl.classList.toggle('font-semibold', b.would_exceed);
+        if (b.would_exceed) budgetEl.textContent += ' — WOULD EXCEED';
+      }
+    } catch (_) {
+      detailEl.textContent = 'could not reach the pricing endpoint';
+    }
+  }
+
+  form.addEventListener('change', refresh);
+  refresh();
+
+  // Prompt hint chips append rather than replace, so they compose.
+  document.querySelectorAll('[data-append]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const ta = form.prompt;
+      const bit = btn.dataset.append;
+      if (ta.value.includes(bit)) return;
+      ta.value = ta.value.trim() ? ta.value.trim().replace(/,\s*$/, '') + ', ' + bit : bit;
+      ta.focus();
+    });
+  });
+
+  // Translate the radio pair into the payload the API expects.
+  form.addEventListener('kalvid:payload', (e) => {
+    const t = target();
+    delete e.detail.target;
+    delete e.detail.persona_id;
+    delete e.detail.client_id;
+    if (t) e.detail[t.kind === 'persona' ? 'persona_id' : 'client_id'] = t.id;
+    e.detail.keep_face = e.detail.keep_face === '1' || e.detail.keep_face === 1;
+    e.detail.count = Number(e.detail.count);
+  });
+})();
+</script>
+
+{% endblock %}

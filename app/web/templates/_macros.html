@@ -1,0 +1,18 @@
+{# A persona's face, with a graceful fallback.
+
+   Both layers are always rendered: the initial-avatar underneath, the image on top.
+   A broken or expired reference URL removes itself on error and the initial shows
+   through — rather than the browser's alt text, which is what a missing face looked
+   like before. Reference URLs point at other people's hosts and do expire. #}
+{% macro avatar(person, size='w-11 h-11', rounded='rounded-full', text='text-[15px]') -%}
+<span class="relative {{ size }} {{ rounded }} shrink-0 overflow-hidden grid place-items-center
+             bg-gradient-to-br from-primary-container to-secondary-container
+             text-on-primary font-bold {{ text }} border border-white/15">
+  {{ person.name[:1]|upper }}
+  {%- if person.reference_image_url %}
+  <img src="{{ person.reference_image_url }}" alt="{{ person.name }}"
+       onerror="this.remove()" loading="lazy"
+       class="absolute inset-0 w-full h-full object-cover">
+  {%- endif %}
+</span>
+{%- endmacro %}

@@ -1,103 +1,155 @@
-:root{
-  --bg:#0f1115; --panel:#171a21; --line:#262b36; --ink:#e6e9ef; --muted:#8b93a7;
-  --accent:#5b8cff; --ok:#3ecf8e; --warm:#e8b93b; --hot:#ff5d5d; --spend:#ff8a3d;
-  --radius:10px;
+/* Kalvid AI — the parts Tailwind can't express.
+   Design tokens live in the tailwind.config block in base.html; this file holds the
+   glass/gradient primitives from the Synthetic Vision spec and a few component
+   classes so the templates stay readable. */
+
+.material-symbols-outlined{
+  font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;
+  font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;
+  display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;
+  -webkit-font-feature-settings:'liga';-webkit-font-smoothing:antialiased;
+  font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;
 }
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);
-  font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif}
-a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em}
 
-.topbar{display:flex;align-items:center;gap:22px;padding:12px 22px;
-  background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
-.brand{font-weight:700;font-size:16px;color:var(--ink)}
-.brand span{color:var(--accent)}
-.topbar nav{display:flex;gap:16px;flex:1}
-.topbar nav a{color:var(--muted)}
-.mode{padding:4px 11px;border-radius:99px;font-size:11.5px;font-weight:700;letter-spacing:.04em}
-.mode-safe{background:rgba(62,207,142,.14);color:var(--ok);border:1px solid rgba(62,207,142,.35)}
-.mode-live{background:rgba(255,93,93,.14);color:var(--hot);border:1px solid rgba(255,93,93,.4)}
+/* Level 2 elevation: tonal layer + blur + a 1px edge. Without the border the panels
+   dissolve into the canvas on a dim display. */
+.glass-panel{
+  background:rgba(30,41,59,.7);backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.1);
+}
+/* Level 3: modals and anything that must sit above a panel. */
+.glass-raised{
+  background:rgba(30,41,59,.92);backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 20px 40px rgba(0,0,0,.4);
+}
 
-.warnings{padding:10px 22px 0;display:flex;flex-direction:column;gap:6px}
-.warn{padding:8px 12px;border-radius:8px;font-size:12.5px;border:1px solid var(--line)}
-.warn-ok{background:rgba(62,207,142,.07);border-color:rgba(62,207,142,.25);color:#a9e6c9}
-.warn-hot{background:rgba(232,185,59,.08);border-color:rgba(232,185,59,.3);color:#e9d49a}
+.gradient-text{
+  background:linear-gradient(135deg,#d0bcff,#4cd7f6);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+}
 
-main{padding:22px;max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
-@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.btn-primary{
+  background:linear-gradient(135deg,#a078ff,#03b5d3);
+  border:1px solid rgba(255,255,255,.2);transition:all .3s ease;font-weight:600;
+}
+.btn-primary:hover:not([disabled]){box-shadow:0 0 20px rgba(160,120,255,.5);transform:translateY(-1px)}
+.btn-primary[disabled]{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}
 
-.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
-.card h2{margin:0 0 12px;font-size:15px;letter-spacing:.01em}
-.card h3{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
-.head{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.back{display:inline-block;color:var(--muted);font-size:13px}
+/* The one button that spends real money at full price. It is deliberately NOT the
+   brand gradient — approving a final render should never look like every other CTA. */
+.btn-spend{
+  background:linear-gradient(135deg,#ff8a3d,#ff6b2c);
+  border:1px solid rgba(255,255,255,.2);color:#1a0e05;transition:all .3s ease;font-weight:700;
+}
+.btn-spend:hover:not([disabled]){box-shadow:0 0 22px rgba(255,138,61,.45);transform:translateY(-1px)}
+.btn-spend[disabled]{opacity:.35;cursor:not-allowed;filter:grayscale(.6);transform:none;box-shadow:none}
 
-table{width:100%;border-collapse:collapse;font-size:13px}
-th{text-align:left;color:var(--muted);font-weight:600;font-size:11.5px;
-  text-transform:uppercase;letter-spacing:.06em;padding:6px 8px;border-bottom:1px solid var(--line)}
-td{padding:8px;border-bottom:1px solid rgba(38,43,54,.6);vertical-align:top}
-tr.blocked td{background:rgba(255,93,93,.06)}
-.brief{color:#c3c9d6}
-.muted{color:var(--muted)} .hot{color:var(--hot)} .warm{color:var(--warm)}
+.btn-ghost{
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);
+  color:#cbc3d7;transition:all .2s ease;font-weight:600;
+}
+.btn-ghost:hover:not([disabled]){background:rgba(255,255,255,.09);color:#e7e0ed}
+.btn-ghost[disabled]{opacity:.4;cursor:not-allowed}
 
-.pill{display:inline-block;padding:2px 8px;border-radius:99px;background:#232833;
-  color:var(--muted);font-size:11px;border:1px solid var(--line)}
-.pill.spend{background:rgba(255,138,61,.14);color:var(--spend);border-color:rgba(255,138,61,.35)}
-.pill.ok{background:rgba(62,207,142,.14);color:var(--ok);border-color:rgba(62,207,142,.3)}
-.pill.hot{background:rgba(255,93,93,.15);color:var(--hot);border-color:rgba(255,93,93,.35)}
-.pill.warm{background:rgba(232,185,59,.15);color:var(--warm);border-color:rgba(232,185,59,.35)}
+.card-hover{transition:transform .3s ease,box-shadow .3s ease,border-color .3s ease}
+.card-hover:hover{
+  transform:translateY(-4px);box-shadow:0 10px 30px rgba(0,0,0,.5);
+  border-color:rgba(208,188,255,.3);
+}
 
-.status{padding:2px 8px;border-radius:5px;font-size:11.5px;font-weight:600;background:#232833;color:var(--muted)}
-.s-draft_ready{background:rgba(91,140,255,.16);color:#9db6ff}
-.s-drafting,.s-rendering,.s-approved,.s-running,.s-pending{background:rgba(232,185,59,.15);color:var(--warm)}
-.s-complete,.s-succeeded{background:rgba(62,207,142,.15);color:var(--ok)}
-.s-failed{background:rgba(255,93,93,.15);color:var(--hot)}
-.s-rejected,.s-cancelled{background:#232833;color:var(--muted)}
+/* Prompt inputs are the component people spend the most time in.
+   Selectors are element-qualified on purpose: the Tailwind forms plugin injects its
+   own [type='number'] / [type='text'] base rules at runtime, after this stylesheet,
+   so a bare .field loses the cascade and number inputs render white-on-white. */
+.field,
+input.field, textarea.field, select.field,
+input[type=text].field, input[type=number].field, input[type=url].field,
+input[type=search].field, input[type=email].field{
+  background:rgba(30,41,59,.5);border:1px solid rgba(255,255,255,.1);
+  color:#e7e0ed;border-radius:.5rem;padding:10px 12px;width:100%;
+  font:inherit;transition:border-color .2s ease,box-shadow .2s ease;
+  --tw-ring-color:transparent;box-shadow:none;
+}
+.field::placeholder{color:#958ea0}
+.field:focus,
+input.field:focus, textarea.field:focus, select.field:focus{
+  outline:none;border-color:#d0bcff;box-shadow:0 0 0 4px rgba(208,188,255,.15);
+  --tw-ring-color:transparent;
+}
+select.field{appearance:none;background-image:none}
+select.field option{background:#211e27;color:#e7e0ed}
+/* Must out-specify the element-qualified .field rules above, or the padding
+   shorthand wins and the placeholder sits under the search icon. */
+input.field.field-icon, .field.field-icon{padding-left:42px}
 
-.bar{height:6px;background:#232833;border-radius:99px;overflow:hidden;min-width:90px}
-.bar i{display:block;height:100%;background:var(--ok)}
-.bar i.warm{background:var(--warm)} .bar i.hot{background:var(--hot)}
-.barcell{width:110px}
+.field-label{
+  display:block;font-size:12px;font-weight:600;letter-spacing:.04em;
+  color:#cbc3d7;margin-bottom:6px;
+}
 
-.stats{display:flex;gap:26px;flex-wrap:wrap}
-.stats div{display:flex;flex-direction:column}
-.stats span{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em}
-.stats strong{font-size:21px}
+.chip{
+  display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:9999px;
+  font-size:11.5px;font-weight:600;letter-spacing:.02em;white-space:nowrap;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:#cbc3d7;
+}
+.chip-primary{background:rgba(208,188,255,.14);border-color:rgba(208,188,255,.35);color:#d0bcff}
+.chip-secondary{background:rgba(76,215,246,.13);border-color:rgba(76,215,246,.32);color:#4cd7f6}
+.chip-spend{background:rgba(255,138,61,.14);border-color:rgba(255,138,61,.35);color:#ff8a3d}
+.chip-ok{background:rgba(62,207,142,.14);border-color:rgba(62,207,142,.32);color:#3ecf8e}
+.chip-warn{background:rgba(232,185,59,.14);border-color:rgba(232,185,59,.32);color:#e8b93b}
+.chip-danger{background:rgba(255,93,93,.15);border-color:rgba(255,93,93,.35);color:#ff5d5d}
 
-.stages{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
-@media(max-width:700px){.stages{grid-template-columns:1fr}}
-.stage{border:1px solid var(--line);border-radius:8px;padding:12px;background:#12151b}
-.cost{font-size:22px;margin:2px 0;font-weight:600}
+/* Job/generation status. Mapped to meaning, not to a rainbow:
+   violet = waiting on a human, amber = machine working, green = done, red = broken. */
+.s-created,.s-cancelled,.s-rejected{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.1);color:#958ea0}
+.s-draft_ready{background:rgba(208,188,255,.16);border-color:rgba(208,188,255,.4);color:#d0bcff}
+.s-drafting,.s-rendering,.s-approved,.s-running,.s-pending{background:rgba(232,185,59,.15);border-color:rgba(232,185,59,.35);color:#e8b93b}
+.s-complete,.s-succeeded{background:rgba(62,207,142,.15);border-color:rgba(62,207,142,.35);color:#3ecf8e}
+.s-failed{background:rgba(255,93,93,.15);border-color:rgba(255,93,93,.4);color:#ff5d5d}
 
-.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.btn{display:inline-block;padding:8px 14px;border-radius:8px;border:1px solid var(--line);
-  background:#232833;color:var(--ink);font-size:13px;font-weight:600;cursor:pointer}
-.btn:hover:not([disabled]){background:#2b3140;text-decoration:none}
-.btn[disabled]{opacity:.4;cursor:not-allowed}
-.btn-spend{background:var(--spend);border-color:var(--spend);color:#1a0e05}
-.btn-spend:hover:not([disabled]){background:#ff9c5c}
-.btn-quiet{background:transparent;color:var(--muted)}
-.spinner{color:var(--warm);font-size:12.5px}
+.meter{height:6px;border-radius:9999px;background:rgba(255,255,255,.08);overflow:hidden;position:relative}
+.meter>i{display:block;height:100%;border-radius:9999px;background:linear-gradient(90deg,#4cd7f6,#d0bcff);transition:width .4s ease}
+.meter>i.warm{background:linear-gradient(90deg,#e8b93b,#ffb869)}
+.meter>i.hot{background:linear-gradient(90deg,#ff5d5d,#ff8a3d)}
+/* In-flight spend: reserved but not yet settled. Hatched so it reads as provisional. */
+.meter>u{position:absolute;top:0;height:100%;background-image:repeating-linear-gradient(
+  45deg,rgba(255,138,61,.55) 0 4px,rgba(255,138,61,.15) 4px 8px)}
 
-form.stack{display:flex;flex-direction:column;gap:9px;margin-top:12px}
-form .row{display:flex;gap:10px;flex-wrap:wrap}
-form .row label{flex:1;min-width:130px}
-label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
-input,select,textarea{background:#12151b;border:1px solid var(--line);color:var(--ink);
-  padding:8px 10px;border-radius:7px;font:inherit;width:100%}
-input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
-button{cursor:pointer}
-form button{align-self:flex-start;padding:8px 16px;border-radius:8px;border:1px solid var(--accent);
-  background:var(--accent);color:#08111f;font-weight:600}
-details summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin-top:12px}
+.progress-pulse{animation:kalvid-pulse 1.8s ease-in-out infinite}
+@keyframes kalvid-pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.animate-pulse-slow{animation:kalvid-pulse 2.6s ease-in-out infinite}
 
-pre{background:#12151b;border:1px solid var(--line);border-radius:8px;padding:12px;
-  overflow-x:auto;font-size:12px;white-space:pre-wrap;word-break:break-word}
+table.data{width:100%;border-collapse:collapse;font-size:13px}
+table.data th{
+  text-align:left;color:#958ea0;font-weight:600;font-size:11px;text-transform:uppercase;
+  letter-spacing:.07em;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.1);
+}
+table.data td{padding:11px 10px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:middle}
+table.data tr:last-child td{border-bottom:0}
+table.data tbody tr:hover{background:rgba(255,255,255,.02)}
+table.data tr.blocked td{background:rgba(255,93,93,.06)}
 
-.toast{position:fixed;right:18px;bottom:18px;max-width:420px;padding:12px 15px;border-radius:9px;
-  background:var(--panel);border:1px solid var(--line);box-shadow:0 8px 30px rgba(0,0,0,.5);
-  font-size:13px;z-index:50;white-space:pre-wrap}
+pre.code{
+  background:rgba(15,13,21,.7);border:1px solid rgba(255,255,255,.08);border-radius:.5rem;
+  padding:14px;overflow-x:auto;font-size:12px;line-height:1.6;white-space:pre-wrap;
+  word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#cbc3d7;
+}
+
+.toast{
+  position:fixed;right:18px;bottom:18px;max-width:440px;padding:14px 16px;border-radius:.75rem;
+  background:rgba(30,41,59,.92);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 20px 40px rgba(0,0,0,.5);font-size:13px;line-height:1.5;z-index:100;
+  white-space:pre-wrap;color:#e7e0ed;animation:toast-in .25s ease;
+}
+@keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .toast.err{border-color:rgba(255,93,93,.5);color:#ffc9c9}
-.toast.ok{border-color:rgba(62,207,142,.4);color:#b6ebd3}
+.toast.ok{border-color:rgba(62,207,142,.45);color:#b6ebd3}
+
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:9999px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.18);background-clip:content-box}
+
+details>summary{cursor:pointer;list-style:none}
+details>summary::-webkit-details-marker{display:none}

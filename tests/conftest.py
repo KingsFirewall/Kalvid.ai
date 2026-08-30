@@ -20,7 +20,7 @@ def fresh_db():
     db.init_db()
     conn = db.get_conn()
     conn.executescript(
-        "DELETE FROM budget_events; DELETE FROM generations; "
+        "DELETE FROM assets; DELETE FROM budget_events; DELETE FROM generations; "
         "DELETE FROM jobs; DELETE FROM personas; DELETE FROM clients;"
     )
     conn.commit()

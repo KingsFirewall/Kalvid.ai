@@ -93,14 +93,14 @@ def test_no_automatic_retry_after_failure(persona_id):
     assert n == 1, "a failure must go back to a human, never auto-refire"
 
 
-def test_provider_cost_of_none_falls_back_to_estimate_not_zero(persona_id):
+def test_provider_cost_of_none_falls_back_to_estimate_not_zero(client_id, persona_id):
     """A silent provider must never be recorded as a free call."""
     job_id = _job(persona_id)
     gen_id = db.insert(
-        """INSERT INTO generations (job_id, stage, provider, model, status,
+        """INSERT INTO generations (job_id, client_id, stage, provider, model, status,
                                     estimated_cost_usd)
-           VALUES (?,'final','fal','FINAL_VIDEO_MODEL','running', 4.0)""",
-        (job_id,),
+           VALUES (?,?,'final','fal','FINAL_VIDEO_MODEL','running', 4.0)""",
+        (job_id, client_id),
     )
     ledger.settle(gen_id, status="succeeded", actual_cost_usd=None, output_url="x")
     assert db.query_one("SELECT actual_cost_usd c FROM generations WHERE id=?",

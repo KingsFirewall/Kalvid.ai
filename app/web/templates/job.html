@@ -2,118 +2,255 @@
 {% block title %}Job {{ job.id }} — Kalvid AI{% endblock %}
 {% block body %}
 
-<a class="back" href="/">← Dashboard</a>
+{% set latest_draft = job.generations | selectattr('stage','equalto','draft')
+                     | selectattr('status','equalto','succeeded') | list | last %}
+{% set latest_final = job.generations | selectattr('stage','equalto','final')
+                     | selectattr('status','equalto','succeeded') | list | last %}
+{% set showing = latest_final or latest_draft %}
+{% set working = job.status in ('drafting','rendering','approved') %}
 
-<section class="card">
-  <div class="head">
-    <h2>Job {{ job.id }} — {{ job.client_name }} / {{ job.persona_name }}</h2>
-    <span class="status s-{{ job.status }}">{{ job.status }}</span>
+<header class="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-2">
+  <div class="min-w-0">
+    <a href="/creator" class="inline-flex items-center gap-1 text-[13px] text-on-surface-variant hover:text-primary mb-2">
+      <span class="material-symbols-outlined text-[16px]">arrow_back</span> Creator
+    </a>
+    <h2 class="font-headline-lg text-[26px] md:text-headline-lg text-on-surface flex items-center gap-3 flex-wrap">
+      Job {{ job.id }}
+      <span class="chip s-{{ job.status }}">
+        {% if working %}<span class="w-1.5 h-1.5 rounded-full bg-current progress-pulse"></span>{% endif %}
+        {{ job.status.replace('_',' ') }}
+      </span>
+    </h2>
+    <p class="text-[13.5px] text-on-surface-variant mt-1.5">
+      <a href="/clients/{{ job.client_id }}" class="hover:text-primary">{{ job.client_name }}</a>
+      · {{ job.persona_name }} · {{ job.platform }} · {{ job.target_duration }}s
+      · <span class="chip chip-secondary">{{ job.identity_strategy }}</span>
+    </p>
   </div>
-  <p class="brief">{{ job.brief }}</p>
-  <p class="muted">{{ job.platform }} · {{ job.target_duration }}s ·
-     identity lock: <span class="pill">{{ job.identity_strategy }}</span></p>
-</section>
+  <div class="text-right shrink-0">
+    <div class="text-[11px] uppercase tracking-wider text-on-surface-variant">Spent on this job</div>
+    <div class="font-headline-md text-headline-md tabular-nums {{ 'text-spend' if job.cost.total_usd else 'text-on-surface-variant' }}">
+      ${{ '%.4f'|format(job.cost.total_usd) }}
+    </div>
+  </div>
+</header>
 
-<!-- The gate: cost is shown BEFORE the button that spends it. -->
-<section class="card">
-  <h2>Next step</h2>
-  <div class="stages">
+<div class="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-md items-start">
+
+  <!-- Preview -->
+  <div class="space-y-md min-w-0">
+    <div class="glass-panel rounded-2xl overflow-hidden">
+      <div class="relative bg-surface-container-lowest aspect-video grid place-items-center">
+        {% if showing and showing.media %}
+          <video src="{{ showing.media }}" controls playsinline class="w-full h-full object-contain bg-black"></video>
+          <div class="absolute top-3 left-3 flex gap-2 pointer-events-none">
+            <span class="chip {{ 'chip-ok' if showing.stage == 'final' else 'chip-primary' }} backdrop-blur-md">
+              <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
+              {{ 'Final render' if showing.stage == 'final' else 'Draft' }}
+            </span>
+            <span class="chip backdrop-blur-md">gen {{ showing.id }}</span>
+          </div>
+        {% elif working %}
+          <div class="text-center px-6 py-16">
+            <div class="w-14 h-14 mx-auto rounded-full border-2 border-primary/25 border-t-primary animate-spin"></div>
+            <p class="font-headline-md text-[18px] text-on-surface mt-5">
+              {{ 'Rendering the final…' if job.status == 'rendering' else 'Generating your draft…' }}
+            </p>
+            <p class="text-[13px] text-on-surface-variant mt-1.5" data-poll="8">
+              This page refreshes itself. Video generation usually takes a minute or two.
+            </p>
+          </div>
+        {% else %}
+          <div class="text-center px-6 py-16">
+            <span class="material-symbols-outlined text-[44px] text-on-surface-variant/30">smart_display</span>
+            <p class="font-headline-md text-[18px] text-on-surface mt-3">Nothing generated yet</p>
+            <p class="text-[13px] text-on-surface-variant mt-1.5">Nothing spent, either. Start with a draft →</p>
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="p-5 border-t border-white/5">
+        <div class="font-label-md text-[11px] uppercase tracking-wider text-on-surface-variant mb-2">Brief</div>
+        <p class="text-body-md text-on-surface leading-relaxed">{{ job.brief }}</p>
+      </div>
+    </div>
+
+    <!-- The locked face this draft has to match. Putting it beside the video is the
+         whole point of the review step. -->
+    {% if job.reference_image_url %}
+    <div class="glass-panel rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="material-symbols-outlined text-[19px] text-secondary">face</span>
+        <h3 class="font-headline-md text-[16px] text-on-surface">Locked reference</h3>
+        <span class="text-[12px] text-on-surface-variant">— does the draft still look like her?</span>
+      </div>
+      <div class="relative inline-block rounded-xl overflow-hidden border border-white/10">
+        <div class="w-64 h-56 grid place-items-center bg-warn/[0.06] px-5 text-center">
+          <div>
+            <span class="material-symbols-outlined text-[26px] text-warn">broken_image</span>
+            <p class="text-[12px] text-warn mt-2 leading-relaxed">
+              This reference URL no longer loads. A draft can't be checked against a face
+              you can't see — re-set it in the Studio.
+            </p>
+          </div>
+        </div>
+        <img src="{{ job.reference_image_url }}" alt="Locked reference still for {{ job.persona_name }}"
+             onerror="this.remove()"
+             class="absolute inset-0 w-full h-full object-cover">
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="glass-panel rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="material-symbols-outlined text-[19px] text-primary">auto_awesome</span>
+        <h3 class="font-headline-md text-[16px] text-on-surface">Structured prompt</h3>
+      </div>
+      <p class="text-[12.5px] text-on-surface-variant mb-3">Expanded from your brief before it reaches any provider.</p>
+      <pre class="code">{{ job.structured_prompt.prompt }}</pre>
+      <details class="mt-3">
+        <summary class="text-[12.5px] text-on-surface-variant hover:text-primary inline-flex items-center gap-1">
+          <span class="material-symbols-outlined text-[16px]">expand_more</span> All fields
+        </summary>
+        <pre class="code mt-2">{{ prompt_json }}</pre>
+      </details>
+    </div>
+  </div>
+
+  <!-- The gate. Cost is on screen before the button that spends it. -->
+  <aside class="glass-panel rounded-2xl p-5 space-y-5 xl:sticky xl:top-6">
+    <div class="flex items-center gap-2">
+      <span class="material-symbols-outlined text-[20px] text-spend">payments</span>
+      <h3 class="font-headline-md text-[17px] text-on-surface">What this costs</h3>
+    </div>
+
     {% for stage in ['draft', 'final'] %}
       {% set p = preview.get(stage) %}
-      <div class="stage">
-        <h3>{{ stage }}</h3>
+      <div class="rounded-xl border p-4 {{ 'border-white/10 bg-white/[0.02]' if stage == 'draft' else 'border-spend/25 bg-spend/[0.05]' }}">
+        <div class="flex items-center justify-between mb-2">
+          <span class="font-label-md text-[11px] uppercase tracking-wider text-on-surface-variant">
+            {{ 'Draft — the cheap check' if stage == 'draft' else 'Final — full price' }}
+          </span>
+          {% if not p.error and not p.billable %}<span class="chip chip-ok">$0 dry run</span>{% endif %}
+        </div>
+
         {% if p.error %}
-          <p class="hot">{{ p.error }}</p>
+          <p class="text-[13px] text-danger flex items-start gap-1.5">
+            <span class="material-symbols-outlined text-[17px] shrink-0">error</span>{{ p.error }}
+          </p>
         {% else %}
-          <p class="cost">${{ '%.4f'|format(p.estimate_usd) }}</p>
-          <p class="muted">{{ p.model }}
-             {% if not p.billable %}
-               <span class="pill ok">dry run — charged $0</span>
-             {% else %}via {{ p.provider }}{% endif %}
-             {% if not p.rate_verified %}
-               <span class="pill hot">price unverified</span>
-             {% endif %}</p>
+          <div class="font-headline-lg text-[28px] tabular-nums {{ 'text-on-surface' if stage == 'draft' else 'text-spend' }}">
+            ${{ '%.4f'|format(p.estimate_usd) }}
+          </div>
+          <div class="text-[12px] text-on-surface-variant mt-1 break-all">
+            {{ p.model }}{% if p.variant %} · {{ p.variant }}{% endif %}
+          </div>
+          {% if not p.rate_verified %}
+            <div class="chip chip-danger mt-2">price unverified — live calls refused</div>
+          {% endif %}
           {% for b in p.budget %}
-            <p class="{{ 'hot' if b.would_exceed else 'muted' }}">
-              {{ b.scope }} cap ${{ '%.2f'|format(b.cap) }} ·
-              ${{ '%.2f'|format(b.remaining) }} left
-              {% if b.would_exceed %}— WOULD EXCEED{% endif %}
-            </p>
+            <div class="flex items-center justify-between text-[12px] mt-2 pt-2 border-t border-white/5">
+              <span class="text-on-surface-variant">{{ b.scope }} cap</span>
+              <span class="tabular-nums {{ 'text-danger font-semibold' if b.would_exceed else 'text-on-surface-variant' }}">
+                ${{ '%.2f'|format(b.remaining) }} left{% if b.would_exceed %} · WOULD EXCEED{% endif %}
+              </span>
+            </div>
           {% endfor %}
         {% endif %}
       </div>
     {% endfor %}
+
+    {% if preview.gate %}
+      <div class="flex items-start gap-2 text-[12px] rounded-lg px-3 py-2.5
+           {{ 'bg-white/[0.03] text-on-surface-variant' if preview.gate.effective else 'bg-warn/[0.08] border border-warn/25 text-warn' }}">
+        <span class="material-symbols-outlined text-[16px] shrink-0">{{ 'info' if preview.gate.effective else 'warning' }}</span>
+        <span>{{ preview.gate.note }}</span>
+      </div>
+    {% endif %}
+
+    <div class="space-y-2.5 pt-1">
+      {% if job.status in ['created', 'draft_ready', 'failed'] %}
+        <button class="w-full btn-ghost rounded-lg py-3 px-4 flex items-center justify-center gap-2 text-label-md font-label-md"
+                data-action="/api/jobs/{{ job.id }}/draft">
+          <span class="material-symbols-outlined text-[19px]">bolt</span>
+          {{ 'Generate another draft' if job.status == 'draft_ready' else 'Generate draft' }}
+        </button>
+      {% endif %}
+
+      {% if job.status == 'draft_ready' %}
+        <button class="w-full btn-spend rounded-lg py-3.5 px-4 flex items-center justify-center gap-2 text-label-md font-label-md"
+                data-action="/api/jobs/{{ job.id }}/approve"
+                data-confirm="Approve the FULL-PRICE render for job {{ job.id }}?&#10;&#10;Estimated ${{ '%.2f'|format(preview.final.estimate_usd or 0) }}{% if not preview.final.billable %} (dry run — charged $0){% endif %}.">
+          <span class="material-symbols-outlined text-[19px]">check_circle</span>
+          Approve final — ${{ '%.2f'|format(preview.final.estimate_usd or 0) }}
+        </button>
+      {% elif job.status not in ['complete', 'rejected'] %}
+        <button class="w-full btn-spend rounded-lg py-3.5 px-4 flex items-center justify-center gap-2 text-label-md font-label-md"
+                disabled title="A reviewed draft is required first">
+          <span class="material-symbols-outlined text-[19px]">lock</span>
+          Approve final — needs a draft
+        </button>
+      {% endif %}
+
+      {% if job.status not in ['complete', 'rejected'] %}
+        <button class="w-full rounded-lg py-2.5 px-4 text-[13px] text-on-surface-variant hover:text-danger transition-colors"
+                data-action="/api/jobs/{{ job.id }}/reject"
+                data-confirm="Kill job {{ job.id }}? No further spend.">Reject this job</button>
+      {% endif %}
+
+      {% if working %}
+        <div class="flex items-center justify-center gap-2 text-[12.5px] text-warn pt-1" data-poll="8">
+          <span class="w-3.5 h-3.5 rounded-full border-2 border-warn/30 border-t-warn animate-spin"></span>
+          working — this page refreshes
+        </div>
+      {% endif %}
+    </div>
+  </aside>
+</div>
+
+<!-- Ledger -->
+<section class="glass-panel rounded-2xl p-6">
+  <div class="flex items-end justify-between gap-4 mb-4">
+    <div>
+      <h3 class="font-headline-md text-[19px] text-on-surface">Every call this job made</h3>
+      <p class="text-[12.5px] text-on-surface-variant mt-0.5">A row is written before the request fires, then reconciled with the real charge.</p>
+    </div>
+    <span class="chip chip-spend tabular-nums">${{ '%.4f'|format(job.cost.total_usd) }} total</span>
   </div>
 
-  {% if preview.gate %}
-    <p class="{{ 'muted' if preview.gate.effective else 'hot' }}">
-      {{ preview.gate.note }}
-    </p>
-  {% endif %}
-
-  <div class="actions">
-    {% if job.status in ['created', 'draft_ready', 'failed'] %}
-      <button class="btn" data-action="/api/jobs/{{ job.id }}/draft">
-        {{ 'Re-draft' if job.status == 'draft_ready' else 'Generate draft' }} (cheap)
-      </button>
-    {% endif %}
-
-    {% if job.status == 'draft_ready' %}
-      <button class="btn btn-spend"
-              data-action="/api/jobs/{{ job.id }}/approve"
-              data-confirm="Approve the FULL-PRICE render for job {{ job.id }}?
-Estimated ${{ '%.2f'|format(preview.final.estimate_usd or 0) }}.">
-        Approve final render (${{ '%.2f'|format(preview.final.estimate_usd or 0) }})
-        {% if not preview.final.billable %} — dry run{% endif %}
-      </button>
-    {% elif job.status not in ['complete', 'rejected'] %}
-      <button class="btn" disabled title="A reviewed draft is required first">
-        Approve final render — needs a draft
-      </button>
-    {% endif %}
-
-    {% if job.status not in ['complete', 'rejected'] %}
-      <button class="btn btn-quiet" data-action="/api/jobs/{{ job.id }}/reject"
-              data-confirm="Kill job {{ job.id }}? No further spend.">Reject</button>
-    {% endif %}
-
-    {% if job.status in ['drafting', 'rendering', 'approved'] %}
-      <span class="spinner" data-poll="8">working… this page refreshes</span>
-    {% endif %}
-  </div>
-</section>
-
-<section class="card">
-  <h2>Generations — ${{ '%.4f'|format(job.cost.total_usd) }} total</h2>
   {% if not job.generations %}
-    <p class="muted">Nothing generated yet. Nothing spent.</p>
+    <p class="text-[13px] text-on-surface-variant py-6 text-center">Nothing generated yet. Nothing spent.</p>
   {% else %}
-  <table>
-    <tr><th>#</th><th>Stage</th><th>Provider / model</th><th>Status</th>
-        <th>Est.</th><th>Actual</th><th>Output</th></tr>
-    {% for g in job.generations %}
-    <tr>
-      <td>{{ g.id }}</td>
-      <td><span class="pill {{ 'spend' if g.stage == 'final' else '' }}">{{ g.stage }}</span></td>
-      <td>{{ g.provider }} · {{ g.model }}</td>
-      <td><span class="status s-{{ g.status }}">{{ g.status }}</span>
-          {% if g.error %}<br><small class="hot">{{ g.error[:120] }}</small>{% endif %}</td>
-      <td>${{ '%.4f'|format(g.estimated_cost_usd) }}</td>
-      <td>{% if g.actual_cost_usd is not none %}${{ '%.4f'|format(g.actual_cost_usd) }}
-          {% else %}<span class="muted">—</span>{% endif %}</td>
-      <td>{% if g.output_url %}<a href="{{ g.output_url }}" target="_blank">open</a>
-          {% else %}<span class="muted">—</span>{% endif %}</td>
-    </tr>
-    {% endfor %}
-  </table>
+  <div class="overflow-x-auto">
+    <table class="data min-w-[720px]">
+      <thead><tr><th>#</th><th>Stage</th><th>Provider / model</th><th>Status</th><th>Est.</th><th>Actual</th><th>Output</th></tr></thead>
+      <tbody>
+      {% for g in job.generations %}
+      <tr>
+        <td class="text-on-surface-variant tabular-nums">{{ g.id }}</td>
+        <td><span class="chip {{ 'chip-spend' if g.stage == 'final' else '' }}">{{ g.stage }}</span></td>
+        <td class="text-on-surface-variant text-[12px]">{{ g.provider }} · {{ g.model }}</td>
+        <td>
+          <span class="chip s-{{ g.status }}">{{ g.status }}</span>
+          {% if g.error %}<div class="text-[11px] text-danger mt-1 max-w-[240px]">{{ g.error[:140] }}</div>{% endif %}
+        </td>
+        <td class="tabular-nums">${{ '%.4f'|format(g.estimated_cost_usd) }}</td>
+        <td class="tabular-nums {{ 'text-spend' if g.actual_cost_usd else 'text-on-surface-variant' }}">
+          {% if g.actual_cost_usd is not none %}${{ '%.4f'|format(g.actual_cost_usd) }}{% else %}—{% endif %}
+        </td>
+        <td>
+          {% if g.media %}
+            <a href="{{ g.media }}" target="_blank" class="chip chip-primary hover:brightness-125">
+              <span class="material-symbols-outlined text-[14px]">open_in_new</span> open
+            </a>
+          {% else %}<span class="text-on-surface-variant">—</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% endif %}
-</section>
-
-<section class="card">
-  <h2>Structured prompt</h2>
-  <p class="muted">Expanded from the brief before it reaches any provider.</p>
-  <pre>{{ job.structured_prompt.prompt }}</pre>
-  <details><summary>All fields</summary><pre>{{ prompt_json }}</pre></details>
 </section>
 
 {% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Library — Kalvid AI{% endblock %}
+{% block body %}
+
+<header class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-2">
+  <div>
+    <h2 class="font-headline-lg text-[26px] md:text-headline-lg text-on-surface">Library</h2>
+    <p class="font-body-md text-body-md text-on-surface-variant mt-1.5">
+      Every draft and finished render. Provider URLs expire — these are the archived copies.
+    </p>
+  </div>
+  <div class="relative w-full lg:w-80">
+    <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[19px] text-on-surface-variant pointer-events-none">search</span>
+    <input class="field field-icon rounded-full" placeholder="Search briefs, personas, clients…" data-filter="#media-grid">
+  </div>
+</header>
+
+<div class="flex items-center gap-2 flex-wrap">
+  {% for key, label in [('all','All media'), ('final','Finished'), ('draft','Drafts')] %}
+    <button data-tab="{{ key }}" data-tab-group="#media-grid"
+            class="chip {{ 'chip-primary' if key == 'all' else '' }} px-4 py-2 text-[12.5px] hover:brightness-125">{{ label }}</button>
+  {% endfor %}
+  <span class="text-[12px] text-on-surface-variant ml-auto tabular-nums">{{ media|length }} item{{ '' if media|length == 1 else 's' }}</span>
+</div>
+
+{% if not media %}
+  <div class="glass-panel rounded-2xl p-12 text-center">
+    <span class="material-symbols-outlined text-[44px] text-on-surface-variant/40">perm_media</span>
+    <h3 class="font-headline-md text-[19px] text-on-surface mt-3 mb-1.5">Nothing rendered yet</h3>
+    <p class="text-[13.5px] text-on-surface-variant max-w-md mx-auto mb-6">
+      Drafts and finals show up here automatically once a job generates something.
+    </p>
+    <a href="/creator" class="btn-primary inline-flex items-center gap-2 rounded-lg px-5 py-3 text-white text-label-md font-label-md">
+      <span class="material-symbols-outlined text-[19px]">movie_creation</span> Create a job
+    </a>
+  </div>
+{% else %}
+<div id="media-grid" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-md">
+  {% for m in media %}
+  <div class="glass-panel card-hover rounded-xl overflow-hidden flex flex-col group"
+       data-tab-item="{{ m.stage }}" data-name="{{ m.brief }} {{ m.persona_name }} {{ m.client_name }} {{ m.model }}">
+    <div class="relative aspect-[3/4] bg-black overflow-hidden">
+      {% if m.kind == 'image' %}
+        <img src="{{ m.media }}" alt="{{ m.brief[:80] }}" class="w-full h-full object-cover">
+      {% else %}
+        <video src="{{ m.media }}" class="w-full h-full object-cover" muted playsinline preload="metadata"
+               onmouseover="this.play()" onmouseout="this.pause();this.currentTime=0"></video>
+      {% endif %}
+      <span class="chip {{ 'chip-ok' if m.stage == 'final' else 'chip-primary' }} absolute top-2.5 left-2.5 backdrop-blur-md">{{ m.stage }}</span>
+      <span class="chip absolute top-2.5 right-2.5 backdrop-blur-md">{{ 'IMG' if m.kind == 'image' else 'MP4' }}</span>
+
+      <div class="absolute inset-x-0 bottom-0 p-2.5 flex items-center gap-2 bg-gradient-to-t from-black/85 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+        <a href="{{ m.media }}" target="_blank" title="Open"
+           class="w-8 h-8 rounded-full grid place-items-center bg-white/10 backdrop-blur-md border border-white/20 text-white hover:bg-white/25">
+          <span class="material-symbols-outlined text-[17px]">open_in_new</span>
+        </a>
+        <a href="/jobs/{{ m.job_id }}" title="Open job"
+           class="w-8 h-8 rounded-full grid place-items-center bg-white/10 backdrop-blur-md border border-white/20 text-white hover:bg-white/25">
+          <span class="material-symbols-outlined text-[17px]">movie</span>
+        </a>
+        <span class="ml-auto chip chip-spend backdrop-blur-md tabular-nums">${{ '%.4f'|format(m.cost) }}</span>
+      </div>
+    </div>
+    <div class="p-3.5">
+      <p class="text-[12.5px] text-on-surface leading-snug line-clamp-2">{{ m.brief }}</p>
+      <div class="text-[10.5px] uppercase tracking-wider text-on-surface-variant/70 mt-2 truncate">
+        {{ m.persona_name }} · {{ m.client_name }}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

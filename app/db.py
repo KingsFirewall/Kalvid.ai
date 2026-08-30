@@ -177,6 +177,12 @@ def init_db() -> None:
     with _init_lock:
         if _initialised:
             return
+        # Upgrade FIRST. CREATE TABLE IF NOT EXISTS is a no-op on a table that
+        # already exists, so an old `generations` keeps its old columns — and the
+        # new CREATE INDEX on client_id in the schema would then fail outright.
+        # On a fresh database this is a no-op and the schema below does the work.
+        from .schema_upgrade import upgrade
+        upgrade()
         executescript(schema_sql())
         _initialised = True
 

@@ -19,10 +19,10 @@ def _job(persona_id, **kw):
 def _spend(client_id, amount, job_id, status="succeeded"):
     """Write a settled generation directly, to set up a spend history."""
     gen_id = db.insert(
-        """INSERT INTO generations (job_id, stage, provider, model, status,
+        """INSERT INTO generations (job_id, client_id, stage, provider, model, status,
                                     estimated_cost_usd, actual_cost_usd)
-           VALUES (?,'final','fal','minimax/h3-max/image-to-video',?,?,?)""",
-        (job_id, status, amount, amount),
+           VALUES (?,?,'final','fal','minimax/h3-max/image-to-video',?,?,?)""",
+        (job_id, client_id, status, amount, amount),
     )
     return gen_id
 
@@ -147,10 +147,10 @@ def test_a_lapsed_promotional_price_reads_as_unverified():
 def test_cost_drift_is_flagged_for_reverification(client_id, persona_id):
     job_id = _job(persona_id)
     gen_id = db.insert(
-        """INSERT INTO generations (job_id, stage, provider, model, status,
+        """INSERT INTO generations (job_id, client_id, stage, provider, model, status,
                                     estimated_cost_usd)
-           VALUES (?,'final','fal','minimax/h3-max/image-to-video','running', 1.00)""",
-        (job_id,),
+           VALUES (?,?,'final','fal','minimax/h3-max/image-to-video','running', 1.00)""",
+        (job_id, client_id),
     )
     report = ledger.settle(gen_id, status="succeeded", actual_cost_usd=3.00)
     assert report["drift_warning"] and report["drift_pct"] == 200.0

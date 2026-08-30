@@ -46,8 +46,15 @@ CREATE TABLE IF NOT EXISTS jobs (
 -- (status='pending', estimated cost) and is reconciled after (actual cost).
 CREATE TABLE IF NOT EXISTS generations (
     id                  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    job_id              BIGINT      NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-    stage               TEXT        NOT NULL CHECK (stage IN ('draft','final')),
+    -- NULL for a standalone still: an influencer asset or an ad image belongs to a
+    -- client and (usually) a persona, but not to a video job.
+    job_id              BIGINT      REFERENCES jobs(id) ON DELETE CASCADE,
+    persona_id          BIGINT      REFERENCES personas(id) ON DELETE SET NULL,
+    -- Denormalised on purpose. Spend used to be found by joining out through
+    -- jobs -> personas, which silently excluded any generation without a job. The
+    -- cap must count every paid call, so the owning client is recorded directly.
+    client_id           BIGINT      NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    stage               TEXT        NOT NULL CHECK (stage IN ('draft','final','still')),
     provider            TEXT        NOT NULL,
     model               TEXT        NOT NULL,
     request_payload     TEXT,
@@ -77,7 +84,27 @@ CREATE TABLE IF NOT EXISTS budget_events (
     created_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Saved influencer assets: generated stills and uploads, reusable as the seed for
+-- any number of videos. One per persona may be flagged primary (the canonical face).
+CREATE TABLE IF NOT EXISTS assets (
+    id                  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    client_id           BIGINT      NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    persona_id          BIGINT      REFERENCES personas(id) ON DELETE CASCADE,
+    generation_id       BIGINT      REFERENCES generations(id) ON DELETE SET NULL,
+    kind                TEXT        NOT NULL DEFAULT 'image' CHECK (kind IN ('image','video')),
+    source              TEXT        NOT NULL DEFAULT 'generated'
+                        CHECK (source IN ('generated','uploaded')),
+    url                 TEXT        NOT NULL,
+    prompt              TEXT,
+    label               TEXT,
+    is_primary          SMALLINT    NOT NULL DEFAULT 0,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_gen_job      ON generations(job_id);
+CREATE INDEX IF NOT EXISTS idx_gen_client   ON generations(client_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_assets_per   ON assets(persona_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_assets_cli   ON assets(client_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_gen_status   ON generations(status);
 CREATE INDEX IF NOT EXISTS idx_gen_created  ON generations(created_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_persona ON jobs(persona_id);
@@ -92,3 +119,4 @@ ALTER TABLE personas      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE jobs          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE generations   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE budget_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assets        ENABLE ROW LEVEL SECURITY;

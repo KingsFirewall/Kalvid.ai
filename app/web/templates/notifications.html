@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Activity — Kalvid AI{% endblock %}
+{% block body %}
+
+<header class="pt-2">
+  <h2 class="font-headline-lg text-[26px] md:text-headline-lg text-on-surface">Activity</h2>
+  <p class="font-body-md text-body-md text-on-surface-variant mt-1.5">
+    Anything that needs a human: drafts waiting on review, failures, and every budget event.
+  </p>
+</header>
+
+{% if waiting %}
+<section class="space-y-3">
+  <h3 class="font-headline-md text-[17px] text-on-surface flex items-center gap-2">
+    <span class="material-symbols-outlined text-[19px] text-primary">rate_review</span>
+    Waiting on you
+  </h3>
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+    {% for j in waiting %}
+    <a href="/jobs/{{ j.id }}" class="glass-panel card-hover rounded-xl p-4 border-l-2 border-l-primary">
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <span class="chip chip-primary">draft ready</span>
+        <span class="text-[11.5px] text-on-surface-variant">#{{ j.id }}</span>
+      </div>
+      <p class="text-[13px] text-on-surface leading-snug line-clamp-2">{{ j.brief }}</p>
+      <p class="text-[11.5px] text-on-surface-variant mt-2">{{ j.client_name }} · {{ j.persona_name }}</p>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if failures %}
+<section class="space-y-3">
+  <h3 class="font-headline-md text-[17px] text-on-surface flex items-center gap-2">
+    <span class="material-symbols-outlined text-[19px] text-danger">error</span>
+    Failures
+    <span class="text-[12.5px] font-normal text-on-surface-variant">— providers bill on failure, so these cost real money</span>
+  </h3>
+  <div class="space-y-2">
+    {% for f in failures %}
+    <a href="/jobs/{{ f.job_id }}" class="glass-panel rounded-xl px-4 py-3 flex items-start gap-3 hover:bg-white/[0.04] transition-colors">
+      <span class="material-symbols-outlined text-[18px] text-danger shrink-0 mt-0.5">warning</span>
+      <div class="min-w-0 flex-1">
+        <p class="text-[13px] text-on-surface">Job {{ f.job_id }} · {{ f.stage }} · {{ f.provider }}</p>
+        <p class="text-[12px] text-danger/80 mt-0.5 break-words">{{ (f.error or 'no error recorded')[:200] }}</p>
+      </div>
+      <span class="text-[12px] text-spend tabular-nums shrink-0">${{ '%.4f'|format(f.effective or 0) }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="glass-panel rounded-2xl p-5">
+  <h3 class="font-headline-md text-[16px] text-on-surface mb-1">Budget audit log</h3>
+  <p class="text-[12.5px] text-on-surface-variant mb-4">Every reservation, block and override, in order.</p>
+  {% if not events %}
+    <p class="text-[13px] text-on-surface-variant py-6 text-center">Nothing recorded yet.</p>
+  {% else %}
+  <div class="overflow-x-auto">
+    <table class="data min-w-[680px]">
+      <thead><tr><th>When</th><th>Client</th><th>Scope</th><th>Amount</th><th>Running</th><th>Cap</th><th>Note</th></tr></thead>
+      <tbody>
+      {% for e in events %}
+      <tr class="{{ 'blocked' if e.blocked else '' }}">
+        <td class="text-on-surface-variant text-[12px] whitespace-nowrap">{{ e.created_at }}</td>
+        <td class="text-[12.5px]"><a href="/clients/{{ e.client_id }}" class="hover:text-primary">{{ e.client_name }}</a></td>
+        <td><span class="chip">{{ e.scope }}</span></td>
+        <td class="tabular-nums">${{ '%.4f'|format(e.amount_usd) }}</td>
+        <td class="tabular-nums text-on-surface-variant">${{ '%.2f'|format(e.running_total) }}</td>
+        <td class="tabular-nums text-on-surface-variant">${{ '%.2f'|format(e.cap_at_time) }}</td>
+        <td class="text-[12px]">
+          {% if e.blocked %}<span class="chip chip-danger">BLOCKED</span> {% endif %}
+          {% if e.overridden_by %}<span class="chip chip-warn">override: {{ e.overridden_by }}</span> {% endif %}
+          <span class="text-on-surface-variant">{{ e.note }}</span>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+{% endblock %}

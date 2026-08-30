@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Budgets — Kalvid AI{% endblock %}
+{% block body %}
+
+<header class="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-2">
+  <div>
+    <h2 class="font-headline-lg text-[26px] md:text-headline-lg text-on-surface">Clients &amp; Budgets</h2>
+    <p class="font-body-md text-body-md text-on-surface-variant mt-1.5">
+      Every client has a hard monthly cap in real dollars. There is no silent way past it.
+    </p>
+  </div>
+  <button class="btn-primary rounded-lg py-3 px-5 flex items-center justify-center gap-2 text-white text-label-md font-label-md shrink-0"
+          data-toggle="#new-client">
+    <span class="material-symbols-outlined text-[19px]">add</span> Add client
+  </button>
+</header>
+
+<section id="new-client" class="glass-panel rounded-2xl p-6 {{ '' if not clients else 'hidden' }}">
+  <h3 class="font-headline-md text-[18px] text-on-surface mb-1">New client</h3>
+  <p class="text-[12.5px] text-on-surface-variant mb-5">
+    A cap of $0 means no spend is allowed at all — set a real number before generating.
+  </p>
+  <form data-post="/api/clients" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div>
+      <label class="field-label" for="c-name">Client name</label>
+      <input name="name" id="c-name" class="field" placeholder="Acme Skincare" required>
+    </div>
+    <div>
+      <label class="field-label" for="c-contact">Contact</label>
+      <input name="contact_info" id="c-contact" class="field" placeholder="optional">
+    </div>
+    <div>
+      <label class="field-label" for="c-cap">Monthly cap (USD)</label>
+      <input name="monthly_budget_cap" id="c-cap" type="number" step="0.01" min="0" value="50" class="field tabular-nums" required>
+    </div>
+    <div>
+      <label class="field-label" for="c-jobcap">Default per-job cap (USD)</label>
+      <input name="default_job_cap" id="c-jobcap" type="number" step="0.01" min="0" value="0" class="field tabular-nums">
+      <p class="text-[11.5px] text-on-surface-variant mt-1.5">0 = no per-job limit beyond the monthly cap.</p>
+    </div>
+    <div class="md:col-span-2 flex items-center gap-3 pt-1">
+      <button type="submit" class="btn-primary rounded-lg py-3 px-6 flex items-center gap-2 text-white text-label-md font-label-md">
+        <span class="material-symbols-outlined text-[19px]">save</span> Create client
+      </button>
+      {% if clients %}
+        <button type="button" data-toggle="#new-client" class="text-[13px] text-on-surface-variant hover:text-on-surface">Cancel</button>
+      {% endif %}
+    </div>
+  </form>
+</section>
+
+{% if clients %}
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-md">
+  {% for c in clients %}
+  <a href="/clients/{{ c.id }}" class="glass-panel card-hover rounded-2xl p-5 block">
+    <div class="flex items-start justify-between gap-3 mb-4">
+      <div class="min-w-0">
+        <h3 class="font-headline-md text-[18px] text-on-surface truncate">{{ c.name }}</h3>
+        {% if c.contact_info %}<p class="text-[12px] text-on-surface-variant truncate mt-0.5">{{ c.contact_info }}</p>{% endif %}
+      </div>
+      <span class="chip {{ 'chip-danger' if c.pct >= 90 else ('chip-warn' if c.pct >= 70 else 'chip-ok') }} shrink-0 tabular-nums">{{ c.pct }}%</span>
+    </div>
+
+    <div class="flex items-baseline gap-1.5 mb-3">
+      <span class="font-headline-lg text-[26px] tabular-nums {{ 'text-danger' if c.remaining <= 0 else 'text-on-surface' }}">
+        ${{ '%.2f'|format(c.remaining) }}
+      </span>
+      <span class="text-[13px] text-on-surface-variant">left of ${{ '%.2f'|format(c.monthly_budget_cap) }}</span>
+    </div>
+
+    <div class="meter mb-2">
+      <i class="{{ 'hot' if c.pct >= 90 else ('warm' if c.pct >= 70 else '') }}" style="width:{{ [c.pct, 100]|min }}%"></i>
+      {% if c.pending_pct %}<u style="left:{{ [c.pct, 100]|min }}%;width:{{ [c.pending_pct, 100 - [c.pct,100]|min]|min }}%"></u>{% endif %}
+    </div>
+
+    <div class="flex items-center justify-between text-[11.5px] text-on-surface-variant">
+      <span class="tabular-nums">${{ '%.2f'|format(c.spent) }} spent</span>
+      {% if c.pending %}<span class="text-spend tabular-nums">${{ '%.2f'|format(c.pending) }} in flight</span>{% endif %}
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

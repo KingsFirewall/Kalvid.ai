@@ -10,7 +10,7 @@ from datetime import date
 from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel, Field
 
-from . import db, jobs, ledger
+from . import db, images, jobs, ledger
 from .config import settings
 from .identity import STRATEGIES, IdentityBinding
 from .prompts import structure
@@ -45,6 +45,25 @@ class JobIn(BaseModel):
     platform: str = "tiktok"
     target_duration: int = Field(8, ge=1, le=120)
     job_budget_cap: float = Field(0, ge=0)
+
+
+class ImageIn(BaseModel):
+    prompt: str
+    client_id: int | None = None
+    persona_id: int | None = None
+    # False = text-to-image (a NEW face). True = seeded from the persona's locked
+    # reference, which is the only way to get the SAME face back.
+    keep_face: bool = False
+    count: int = Field(1, ge=1, le=images.MAX_BATCH)
+    label: str = ""
+    override_by: str | None = None
+
+
+class AssetIn(BaseModel):
+    client_id: int | None = None
+    persona_id: int | None = None
+    url: str
+    label: str = ""
 
 
 class ActionIn(BaseModel):
@@ -330,6 +349,81 @@ def approve(job_id: int, payload: ActionIn = Body(default=ActionIn())):
 def reject(job_id: int, payload: ActionIn = Body(default=ActionIn())):
     _act(jobs.reject, job_id, payload.reason)
     return get_job(job_id)
+
+
+# ---------------------------------------------------------------- stills & assets
+
+@api.post("/images/preview")
+def preview_image(payload: ImageIn):
+    """Cost and model for a still, before anything is spent."""
+    try:
+        return images.preview(client_id=payload.client_id, persona_id=payload.persona_id,
+                              keep_face=payload.keep_face, count=payload.count)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+    except images.ImageError as exc:
+        raise HTTPException(422, str(exc))
+
+
+@api.post("/images", status_code=201)
+def create_image(payload: ImageIn):
+    """Generate one or more stills. Cheap, but it spends — same cap, same ledger."""
+    try:
+        gen_ids = images.generate(
+            prompt=payload.prompt, client_id=payload.client_id,
+            persona_id=payload.persona_id, keep_face=payload.keep_face,
+            count=payload.count, label=payload.label, override_by=payload.override_by)
+    except images.ImageError as exc:
+        raise HTTPException(422, str(exc))
+    except ledger.BudgetExceeded as exc:
+        raise HTTPException(402, str(exc))
+    except UnverifiedRate as exc:
+        raise HTTPException(412, str(exc))
+    except NoProviderAvailable as exc:
+        raise HTTPException(503, str(exc))
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+    return {"generation_ids": gen_ids, "count": len(gen_ids)}
+
+
+@api.get("/assets")
+def get_assets(persona_id: int | None = None, client_id: int | None = None):
+    return images.list_assets(persona_id=persona_id, client_id=client_id)
+
+
+@api.post("/assets", status_code=201)
+def add_asset(payload: AssetIn):
+    """Register an image we did not generate. Costs nothing."""
+    try:
+        aid = images.save_upload(client_id=payload.client_id,
+                                 persona_id=payload.persona_id,
+                                 url=payload.url, label=payload.label)
+    except images.ImageError as exc:
+        raise HTTPException(422, str(exc))
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+    return _row(db.query_one("SELECT * FROM assets WHERE id=?", (aid,)))
+
+
+@api.post("/assets/{asset_id}/primary")
+def make_primary(asset_id: int):
+    """Promote an asset to the persona's locked face."""
+    try:
+        return images.set_primary(asset_id)
+    except images.ImageError as exc:
+        raise HTTPException(422, str(exc))
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@api.delete("/assets/{asset_id}", status_code=204)
+def remove_asset(asset_id: int):
+    try:
+        images.delete_asset(asset_id)
+    except images.ImageError as exc:
+        raise HTTPException(409, str(exc))
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
 
 
 # ---------------------------------------------------------------- system

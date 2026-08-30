@@ -1,31 +1,54 @@
 {% extends "base.html" %}
 {% block title %}Rates — Kalvid AI{% endblock %}
 {% block body %}
-<a class="back" href="/">← Dashboard</a>
-<section class="card">
-  <h2>Price table</h2>
-  <p class="muted">
-    Source: <code>{{ data.path }}</code>. The Budget Guard is only as honest as this file.
-    A rate that has never been verified cannot back a billable call — a placeholder price
-    would make the cap a lie. Re-verify anything older than {{ data.staleness_days }} days.
-  </p>
-  <table>
-    <tr><th>Key</th><th>Kind</th><th>Unit</th><th>USD</th><th>Verified</th><th>Age</th><th>Source</th></tr>
-    {% for r in data.rates %}
-    <tr class="{{ 'blocked' if not r.verified and r.provider != 'mock' else '' }}">
-      <td><code>{{ r.key }}</code></td>
-      <td>{{ r.kind }}</td>
-      <td>{{ r.unit }}</td>
-      <td>${{ '%.4f'|format(r.usd) }}</td>
-      <td>{% if r.verified %}{{ r.last_verified }}
-          {% else %}<span class="pill hot">NEVER — placeholder</span>{% endif %}</td>
-      <td>{% if r.age_days is not none %}
-            <span class="{{ 'hot' if r.stale else '' }}">{{ r.age_days }}d</span>
-          {% else %}<span class="muted">—</span>{% endif %}</td>
-      <td class="muted">{{ r.source }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  <button class="btn" data-action="/api/rates/reload">Reload from disk</button>
+
+<header class="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-2">
+  <div>
+    <h2 class="font-headline-lg text-[26px] md:text-headline-lg text-on-surface">Price table</h2>
+    <p class="font-body-md text-body-md text-on-surface-variant mt-1.5 max-w-3xl">
+      The budget guard is only as honest as this file. A rate that has never been verified
+      cannot back a billable call — a placeholder price would make every cap a lie.
+    </p>
+  </div>
+  <button class="btn-ghost rounded-lg py-2.5 px-5 flex items-center gap-2 text-label-md font-label-md shrink-0"
+          data-action="/api/rates/reload">
+    <span class="material-symbols-outlined text-[18px]">refresh</span> Reload from disk
+  </button>
+</header>
+
+<section class="glass-panel rounded-2xl p-6">
+  <div class="flex items-center gap-2 text-[12.5px] text-on-surface-variant mb-4">
+    <span class="material-symbols-outlined text-[17px]">description</span>
+    <code class="text-primary break-all">{{ data.path }}</code>
+    <span class="ml-auto shrink-0">re-verify anything older than {{ data.staleness_days }} days</span>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="data min-w-[860px]">
+      <thead><tr><th>Model</th><th>Kind</th><th>Unit</th><th>USD</th><th>Verified</th><th>Age</th><th>Source</th></tr></thead>
+      <tbody>
+      {% for r in data.rates %}
+      {% set bad = not r.verified and r.provider != 'mock' %}
+      <tr class="{{ 'blocked' if bad else '' }}">
+        <td><code class="text-[12px] {{ 'text-danger' if bad else 'text-on-surface' }}">{{ r.key }}</code></td>
+        <td><span class="chip {{ 'chip-secondary' if r.kind == 'video' else 'chip-primary' }}">{{ r.kind }}</span></td>
+        <td class="text-on-surface-variant text-[12px]">{{ r.unit }}</td>
+        <td class="tabular-nums font-semibold">${{ '%.4f'|format(r.usd) }}</td>
+        <td>
+          {% if r.verified %}
+            <span class="chip chip-ok">{{ r.last_verified }}</span>
+          {% else %}
+            <span class="chip chip-danger">never — placeholder</span>
+          {% endif %}
+        </td>
+        <td class="tabular-nums {{ 'text-warn' if r.stale else 'text-on-surface-variant' }}">
+          {% if r.age_days is not none %}{{ r.age_days }}d{% else %}—{% endif %}
+        </td>
+        <td class="text-on-surface-variant text-[11.5px] max-w-[300px]">{{ r.source }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
+
 {% endblock %}

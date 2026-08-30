@@ -9,15 +9,23 @@
     "",
     "Optional per-rate fields:",
     "  supports: [...]        -> the model's ACCEPTED input field names. The adapter sends",
-    "  usd_by / price_by     -> price varies by an input param (e.g. resolution tier).",
-    "  price_expires         -> promo end date; the rate reads as UNVERIFIED from then.",
     "                            nothing outside this list, so an unsupported parameter is",
     "                            never smuggled into a request.",
+    "  usd_by / price_by     -> price varies by an input param (e.g. resolution tier).",
+    "  price_expires         -> promo end date; the rate reads as UNVERIFIED from then.",
     "  params: {stage: {...}} -> per-stage input values ('all' applies to every stage).",
     "  identity_via_image     -> the model carries persona identity through image_url, so a",
     "                            persona job must supply a reference still.",
     "  fixed_durations: [..]  -> model only emits these lengths; requests snap UP and are",
-    "                            billed at the tier. Omit for models billing by the second."
+    "                            billed at the tier. Omit for models billing by the second.",
+    "",
+    "routing stages:",
+    "  draft / final          -> the two video stages of the draft-then-approve gate.",
+    "  still                  -> a NEW image from text alone: a face for a new influencer,",
+    "                            or a product/ad still. Cannot preserve an existing face.",
+    "  still_identity         -> a new image OF AN EXISTING persona, seeded from their",
+    "                            locked reference. 10x the price of text-to-image, and the",
+    "                            only one of the two that keeps the face."
   ],
   "rates": {
     "mock:mock-still": {
@@ -96,6 +104,62 @@
       "last_verified": null,
       "source": "TODO: verify at runware.ai \u2014 cheap i2v for a motion check",
       "identity_via_image": true
+    },
+    "fal:fal-ai/flux/schnell": {
+      "provider": "fal",
+      "model": "fal-ai/flux/schnell",
+      "kind": "image",
+      "unit": "per_call",
+      "usd": 0.003,
+      "supports": [
+        "prompt",
+        "image_size",
+        "num_inference_steps",
+        "num_images",
+        "seed",
+        "enable_safety_checker",
+        "output_format"
+      ],
+      "params": {
+        "all": {
+          "image_size": {
+            "width": 720,
+            "height": 1280
+          },
+          "num_images": 1,
+          "enable_safety_checker": true,
+          "output_format": "png"
+        }
+      },
+      "last_verified": "2026-08-30",
+      "source": "fal.ai/models/fal-ai/flux/schnell - '$0.003 per megapixel', billed rounded UP to the nearest megapixel. Our 720x1280 default is 0.92 MP -> 1 MP -> $0.003. Change image_size and this estimate is wrong.",
+      "price_note": "text-to-image: creates a NEW face. It cannot reproduce an existing persona - use still_identity for that."
+    },
+    "fal:fal-ai/flux/dev/image-to-image": {
+      "provider": "fal",
+      "model": "fal-ai/flux/dev/image-to-image",
+      "kind": "image",
+      "unit": "per_call",
+      "usd": 0.03,
+      "identity_via_image": true,
+      "supports": [
+        "image_url",
+        "prompt",
+        "strength",
+        "num_inference_steps",
+        "guidance_scale",
+        "seed",
+        "safety_checker"
+      ],
+      "params": {
+        "all": {
+          "strength": 0.6,
+          "safety_checker": true
+        }
+      },
+      "last_verified": "2026-08-30",
+      "source": "fal.ai/models/fal-ai/flux/dev/image-to-image - '$0.03 per megapixel', billed rounded UP. Output size follows the INPUT image, so a large reference still costs proportionally more than this 1 MP estimate.",
+      "price_note": "10x the text-to-image price, and still ~1/10th of a video render. This is the one that keeps an influencer's face."
     }
   },
   "routing": {
@@ -106,6 +170,13 @@
     ],
     "final": [
       "fal:minimax/h3-max/image-to-video"
+    ],
+    "still": [
+      "fal:fal-ai/flux/schnell",
+      "runware:DRAFT_IMAGE_MODEL"
+    ],
+    "still_identity": [
+      "fal:fal-ai/flux/dev/image-to-image"
     ]
   }
 }

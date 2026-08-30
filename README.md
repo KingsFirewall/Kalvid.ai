@@ -167,6 +167,7 @@ machinery still exists for models that do have them.)
 Dashboard / CLI
       │
       ├── Job Orchestrator ──── draft → [human] → final     app/jobs.py
+      ├── Still Generator ───── image → saved asset          app/images.py
       ├── Cost Ledger + Budget Guard (reserve/settle)       app/ledger.py
       ├── Prompt Structurer (brief → technical prompt)      app/prompts.py
       ├── Identity Binding (how a face stays consistent)    app/identity.py
@@ -176,9 +177,11 @@ Dashboard / CLI
 
 | File | Role |
 |---|---|
-| `app/schema.sql` / `schema_pg.sql` | Tables: clients, personas, jobs, generations, budget_events |
+| `app/schema.sql` / `schema_pg.sql` | Tables: clients, personas, jobs, generations, budget_events, assets |
 | `app/ledger.py` | Two-phase reserve/settle, budget guard, drift detection |
 | `app/jobs.py` | State machine + background worker; the draft-then-final gate |
+| `app/images.py` | Still generation and the persona asset library |
+| `app/schema_upgrade.py` | Idempotent in-place migrations for an existing ledger |
 | `app/router.py` | Cheapest workable provider per stage; refuses unverified prices |
 | `app/identity.py` | The three identity-lock strategies and their validation |
 | `app/prompts.py` | Deterministic brief → structured technical prompt |
@@ -216,6 +219,66 @@ A persona missing the field its strategy needs is **rejected at creation**, rath
 than discovered after paying for a render of the wrong face.
 
 ---
+
+## Images and the asset library
+
+A video needs a face to hold onto. Making one used to mean hosting an image somewhere
+and pasting a URL into a form. Now you generate it here, and it stays.
+
+```bash
+# create a face for a new influencer, then look at /images and lock the best one
+python cli.py status                  # confirm DRY RUN first
+```
+
+**Two routes, and the difference is not cosmetic.**
+
+| Route | Model | Price | What it does |
+|---|---|---|---|
+| `still` | `fal-ai/flux/schnell` | $0.003 | Text-to-image. Invents a **new** face, or a product/ad still. |
+| `still_identity` | `fal-ai/flux/dev/image-to-image` | $0.03 | Seeded from the persona's locked reference. Returns the **same** face. |
+
+Picking the wrong one does not produce an error. It produces a polished, plausible
+photograph of a different person. So the choice is explicit in the API (`keep_face`)
+and named on screen, and a persona with no locked reference cannot select the second
+one at all — it is refused before anything is charged.
+
+Both prices are **per megapixel, rounded up**, verified 2026-08-30 from the fal model
+pages. The 720×1280 default is 0.92 MP and therefore bills as 1 MP. **Change
+`image_size` in `rates.json` and the estimate stops being true** — 1080×1920 is 2.07 MP
+and bills as 3. `flux/dev/image-to-image` has no size parameter at all: its output
+follows the input image, so a large reference still costs proportionally more. The
+cost-drift warning is what catches both.
+
+**Stills spend directly — there is no draft gate.** The gate exists because a video
+costs ~$0.32 and a draft predicts it for $0.075. An image is $0.003. Gating it would
+mean paying for a preview of a preview. The price is still shown before the button,
+and the spend still goes through the same reserve/settle and the same client cap.
+
+**A batch is N reservations, not one.** Ask for 8 images against a cap with room for 2
+and you get 2, then a refusal — not 8, and not 0.
+
+### Every paid call now names the client it charges
+
+`generations` gained `client_id` (and nullable `job_id`/`persona_id`). This is a
+correctness fix, not bookkeeping: spend used to be found by joining
+`generations → jobs → personas`, so **any generation without a job contributed nothing
+to the monthly total** and could be repeated past the cap indefinitely. A still has no
+job. `tests/test_images.py` pins this.
+
+Existing databases are migrated in place on startup by `app/schema_upgrade.py`, which
+is idempotent. SQLite cannot alter a `CHECK` constraint, so the table is rebuilt with
+foreign keys disabled for the swap — the `budget_events` audit trail survives.
+
+### Saved assets
+
+Every generated still is filed in `assets` against its persona. One per persona can be
+promoted to the locked face, which writes `personas.reference_image_url` — the column
+generations actually read. A "primary" flag that the renderer never saw would be a
+label that lies, so promotion sets both. The locked face cannot be deleted while it is
+locked.
+
+After that the loop the tool exists for is: **pick an influencer, write a brief,
+generate.** No uploading.
 
 ## Storage
 

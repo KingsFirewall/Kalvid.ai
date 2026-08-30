@@ -104,8 +104,8 @@ def signed_url(object_path: str, ttl: int | None = None) -> str:
     return f"{settings.supabase_url}/storage/v1{signed}"
 
 
-def archive_output(source_url: str, *, client_name: str, job_id: int,
-                   gen_id: int, kind: str = "video") -> str:
+def archive_output(source_url: str, *, client_name: str, job_id: int | None,
+                   gen_id: int, kind: str = "video", subdir: str | None = None) -> str:
     """Pull a provider output down and store it durably.
 
     Always writes a local copy first (that alone survives the provider expiring the
@@ -113,7 +113,9 @@ def archive_output(source_url: str, *, client_name: str, job_id: int,
     """
     ext = "mp4" if kind == "video" else "png"
     safe_client = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in client_name)
-    rel = f"{safe_client}/job-{job_id}/gen-{gen_id}.{ext}"
+    # A still has no job, so it is filed under the persona (or the client) instead.
+    folder = subdir or f"job-{job_id}"
+    rel = f"{safe_client}/{folder}/gen-{gen_id}.{ext}"
     local = settings.output_dir / rel
     local.parent.mkdir(parents=True, exist_ok=True)
 
