@@ -25,6 +25,12 @@
       <a href="/clients/{{ job.client_id }}" class="hover:text-primary">{{ job.client_name }}</a>
       · {{ job.persona_name }} · {{ job.platform }} · {{ job.target_duration }}s
       · <span class="chip chip-secondary">{{ job.identity_strategy }}</span>
+      {% if job.identity_version %}
+        · <span class="chip chip-primary" title="This job renders as the person it was briefed for, even if the persona has since changed.">
+            <span class="material-symbols-outlined text-[13px]">lock</span>
+            identity v{{ job.identity_version.version }}
+          </span>
+      {% endif %}
     </p>
   </div>
   <div class="text-right shrink-0">
@@ -82,7 +88,9 @@
       <div class="flex items-center gap-2 mb-3">
         <span class="material-symbols-outlined text-[19px] text-secondary">face</span>
         <h3 class="font-headline-md text-[16px] text-on-surface">Locked reference</h3>
-        <span class="text-[12px] text-on-surface-variant">— does the draft still look like her?</span>
+        <span class="text-[12px] text-on-surface-variant">
+          — does the draft still look like her?{% if job.identity_version %} (v{{ job.identity_version.version }}){% endif %}
+        </span>
       </div>
       <div class="relative inline-block rounded-xl overflow-hidden border border-white/10">
         <div class="w-64 h-56 grid place-items-center bg-warn/[0.06] px-5 text-center">

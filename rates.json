@@ -160,23 +160,330 @@
       "last_verified": "2026-08-30",
       "source": "fal.ai/models/fal-ai/flux/dev/image-to-image - '$0.03 per megapixel', billed rounded UP. Output size follows the INPUT image, so a large reference still costs proportionally more than this 1 MP estimate.",
       "price_note": "10x the text-to-image price, and still ~1/10th of a video render. This is the one that keeps an influencer's face."
+    },
+    "fal:fal-ai/wan-25-preview/image-to-video": {
+      "provider": "fal",
+      "model": "fal-ai/wan-25-preview/image-to-video",
+      "kind": "video",
+      "unit": "per_second",
+      "usd": 0.15,
+      "identity_via_image": true,
+      "fixed_durations": [
+        5,
+        10
+      ],
+      "duration_format": "string",
+      "supports": [
+        "prompt",
+        "image_url",
+        "audio_url",
+        "resolution",
+        "duration",
+        "enable_prompt_expansion",
+        "negative_prompt",
+        "enable_safety_checker",
+        "seed"
+      ],
+      "params": {
+        "all": {
+          "enable_safety_checker": true
+        },
+        "draft": {
+          "resolution": "480p"
+        },
+        "final": {
+          "resolution": "1080p"
+        },
+        "lipsync": {
+          "resolution": "1080p"
+        }
+      },
+      "price_by": "resolution",
+      "usd_by": {
+        "480p": 0.05,
+        "720p": 0.1,
+        "1080p": 0.15
+      },
+      "last_verified": "2026-08-31",
+      "source": "fal.ai/models/fal-ai/wan-25-preview/image-to-video - '$0.05 per second for 480p, $0.10 per second for 720p, $0.15 per second for 1080p'. Schema from the endpoint's OpenAPI: duration is the STRING enum 5|10.",
+      "price_note": "The versatile one: image-to-video that ALSO takes an optional audio_url (3-30s), so it covers both ordinary clips and the Fish Audio lipsync pipeline without a second model. Only emits 5s or 10s."
+    },
+    "fal:fal-ai/kling-video/v2.5-turbo/pro/image-to-video": {
+      "provider": "fal",
+      "model": "fal-ai/kling-video/v2.5-turbo/pro/image-to-video",
+      "kind": "video",
+      "unit": "per_second",
+      "usd": 0.07,
+      "identity_via_image": true,
+      "fixed_durations": [
+        5,
+        10
+      ],
+      "duration_format": "string",
+      "supports": [
+        "prompt",
+        "image_url",
+        "duration",
+        "negative_prompt",
+        "cfg_scale",
+        "tail_image_url"
+      ],
+      "params": {
+        "all": {
+          "cfg_scale": 0.5
+        }
+      },
+      "last_verified": "2026-08-31",
+      "source": "fal.ai/models/fal-ai/kling-video/v2.5-turbo/pro/image-to-video - 'For 5s video your request will cost $0.35. For every additional second you will be charged $0.07.' Schema from the endpoint's OpenAPI.",
+      "price_note": "Volume workhorse. No resolution parameter, so there is no cheap draft tier - a 5s draft costs the same $0.35 as 5s of the final."
+    },
+    "fal:fal-ai/bytedance/seedance/v1/pro/image-to-video": {
+      "provider": "fal",
+      "model": "fal-ai/bytedance/seedance/v1/pro/image-to-video",
+      "kind": "video",
+      "unit": "per_second",
+      "usd": 0.124,
+      "identity_via_image": true,
+      "fixed_durations": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "duration_format": "string",
+      "supports": [
+        "prompt",
+        "image_url",
+        "aspect_ratio",
+        "resolution",
+        "duration",
+        "camera_fixed",
+        "seed",
+        "enable_safety_checker",
+        "num_frames",
+        "end_image_url"
+      ],
+      "params": {
+        "all": {
+          "enable_safety_checker": true,
+          "aspect_ratio": "9:16"
+        },
+        "draft": {
+          "resolution": "480p"
+        },
+        "final": {
+          "resolution": "1080p"
+        }
+      },
+      "last_verified": "2026-08-31",
+      "source": "fal.ai/models/fal-ai/bytedance/seedance/v1/pro/image-to-video - fal quotes 'Each 1080p 5 second video costs roughly $0.62', i.e. $0.124/s AT 1080p. Other resolutions are priced by video tokens ((h*w*fps*dur)/1024 at $2.5/M) which this table cannot express - so the 480p draft estimate is WRONG and cost drift will flag it. Verify before routing drafts here.",
+      "price_note": "Premium quality, but the only entry whose price our estimator cannot model faithfully across resolutions."
+    },
+    "fal:fal-ai/veo3.1/image-to-video": {
+      "provider": "fal",
+      "model": "fal-ai/veo3.1/image-to-video",
+      "kind": "video",
+      "unit": "per_second",
+      "usd": 0.2,
+      "identity_via_image": true,
+      "fixed_durations": [
+        4,
+        6,
+        8
+      ],
+      "duration_format": "seconds_suffix",
+      "supports": [
+        "prompt",
+        "image_url",
+        "resolution",
+        "duration",
+        "aspect_ratio",
+        "generate_audio",
+        "negative_prompt",
+        "seed",
+        "safety_tolerance",
+        "auto_fix"
+      ],
+      "params": {
+        "all": {
+          "generate_audio": false,
+          "aspect_ratio": "9:16"
+        },
+        "final": {
+          "resolution": "1080p"
+        }
+      },
+      "price_by": "resolution",
+      "usd_by": {
+        "720p": 0.2,
+        "1080p": 0.2,
+        "4k": 0.4
+      },
+      "last_verified": "2026-08-31",
+      "source": "fal.ai/models/fal-ai/veo3.1/image-to-video - '$0.20 per second at 720p/1080p without audio, $0.40 with audio; 4K $0.40 without / $0.60 with'. Schema from the endpoint's OpenAPI: duration is the STRING enum 4s|6s|8s.",
+      "price_note": "Highest quality, highest price. generate_audio is forced FALSE here - native audio would give a different voice on every clip."
+    },
+    "fal:fal-ai/bytedance/omnihuman": {
+      "provider": "fal",
+      "model": "fal-ai/bytedance/omnihuman",
+      "kind": "video",
+      "unit": "per_second",
+      "usd": 0.14,
+      "identity_via_image": true,
+      "supports": [
+        "image_url",
+        "audio_url"
+      ],
+      "last_verified": "2026-08-31",
+      "source": "fal.ai/models/fal-ai/bytedance/omnihuman - '$0.14 per second' of output. Inputs are image_url + audio_url only; max audio 30s.",
+      "price_note": "Audio-driven avatar: reference plate + a Fish Audio track in, lipsynced clip out. Takes NO prompt, so framing and action come entirely from the plate. 30s cap covers most UGC ads in a single clip."
+    },
+    "fal:fal-ai/qwen-image": {
+      "provider": "fal",
+      "model": "fal-ai/qwen-image",
+      "kind": "image",
+      "unit": "per_call",
+      "usd": 0.02,
+      "supports": [
+        "prompt",
+        "num_inference_steps",
+        "image_size",
+        "use_turbo",
+        "sync_mode",
+        "guidance_scale",
+        "loras",
+        "seed",
+        "enable_safety_checker",
+        "acceleration",
+        "output_format",
+        "num_images",
+        "negative_prompt"
+      ],
+      "params": {
+        "all": {
+          "image_size": {
+            "width": 720,
+            "height": 1280
+          },
+          "num_images": 1,
+          "enable_safety_checker": true,
+          "output_format": "png"
+        }
+      },
+      "last_verified": "2026-08-31",
+      "source": "fal.ai/models/fal-ai/qwen-image - 'Your request will cost $0.02 per megapixel. Images are billed by rounding up to the nearest megapixel.' 720x1280 = 0.92 MP -> 1 MP -> $0.02.",
+      "price_note": "Mid-tier text-to-image. Notably stronger than flux/schnell at rendering legible text, which matters for product packaging."
+    },
+    "fal:fal-ai/bytedance/seedream/v4/text-to-image": {
+      "provider": "fal",
+      "model": "fal-ai/bytedance/seedream/v4/text-to-image",
+      "kind": "image",
+      "unit": "per_call",
+      "usd": 0.03,
+      "supports": [
+        "prompt",
+        "image_size",
+        "num_images",
+        "max_images",
+        "seed",
+        "sync_mode",
+        "enable_safety_checker",
+        "enhance_prompt_mode"
+      ],
+      "params": {
+        "all": {
+          "image_size": {
+            "width": 720,
+            "height": 1280
+          },
+          "num_images": 1,
+          "enable_safety_checker": true
+        }
+      },
+      "last_verified": "2026-08-31",
+      "source": "fal.ai/models/fal-ai/bytedance/seedream/v4/text-to-image - 'Your request will cost $0.03 per image.' Billed per IMAGE, not per megapixel, so size does not change the price.",
+      "price_note": "Flat per-image pricing - the only text-to-image entry whose estimate stays correct if you change image_size."
+    },
+    "fal:fal-ai/nano-banana/edit": {
+      "provider": "fal",
+      "model": "fal-ai/nano-banana/edit",
+      "kind": "image",
+      "unit": "per_call",
+      "usd": 0.039,
+      "identity_via_image": true,
+      "reference_field": "image_urls",
+      "supports": [
+        "prompt",
+        "image_urls",
+        "num_images",
+        "seed",
+        "aspect_ratio",
+        "output_format",
+        "safety_tolerance",
+        "sync_mode",
+        "limit_generations"
+      ],
+      "params": {
+        "all": {
+          "aspect_ratio": "9:16",
+          "num_images": 1,
+          "output_format": "png"
+        }
+      },
+      "last_verified": "2026-08-31",
+      "source": "fal.ai/models/fal-ai/nano-banana/edit - 'Your request will cost $0.039 per image.' Takes image_urls as an ARRAY, not a single image_url.",
+      "price_note": "Identity-preserving editing. Because it conditions on a LIST of images it is the natural fit for a reference pack - several plates at once rather than one."
+    },
+    "anthropic:claude-opus-5": {
+      "provider": "anthropic",
+      "model": "claude-opus-5",
+      "kind": "text",
+      "unit": "per_call",
+      "usd": 0.012,
+      "usd_per_mtok_in": 5.0,
+      "usd_per_mtok_out": 25.0,
+      "last_verified": "2026-08-31",
+      "source": "Anthropic API pricing: Claude Opus 5 $5.00/1M input, $25.00/1M output. The $0.012 flat figure is the RESERVATION estimate for a typical UGC script (~500 in / ~400 out); every call settles at its exact measured token cost, so drift here is informational, not a mispriced cap.",
+      "price_note": "Roughly 1% of the video it writes. Cheap enough that the reason to meter it is the invariant \u2014 every paid call gets a ledger row \u2014 not the money."
     }
   },
   "routing": {
     "draft": [
       "fal:minimax/h3-max/image-to-video",
-      "runware:DRAFT_VIDEO_MODEL",
-      "runware:DRAFT_IMAGE_MODEL"
+      "fal:fal-ai/wan-25-preview/image-to-video",
+      "fal:fal-ai/bytedance/seedance/v1/pro/image-to-video",
+      "runware:DRAFT_VIDEO_MODEL"
     ],
     "final": [
-      "fal:minimax/h3-max/image-to-video"
+      "fal:minimax/h3-max/image-to-video",
+      "fal:fal-ai/wan-25-preview/image-to-video",
+      "fal:fal-ai/kling-video/v2.5-turbo/pro/image-to-video",
+      "fal:fal-ai/bytedance/seedance/v1/pro/image-to-video",
+      "fal:fal-ai/veo3.1/image-to-video"
+    ],
+    "lipsync": [
+      "fal:fal-ai/wan-25-preview/image-to-video",
+      "fal:fal-ai/bytedance/omnihuman"
     ],
     "still": [
       "fal:fal-ai/flux/schnell",
+      "fal:fal-ai/qwen-image",
+      "fal:fal-ai/bytedance/seedream/v4/text-to-image",
       "runware:DRAFT_IMAGE_MODEL"
     ],
     "still_identity": [
+      "fal:fal-ai/nano-banana/edit",
       "fal:fal-ai/flux/dev/image-to-image"
+    ],
+    "script": [
+      "anthropic:claude-opus-5"
     ]
   }
 }

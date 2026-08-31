@@ -101,7 +101,67 @@ value, recorded in `budget_events`. There is no silent way past a cap.
 
 ---
 
-## The video model: `minimax/h3-max/image-to-video`
+## The model catalogue — one API key, eleven models
+
+Everything routes through **fal**, so `FAL_KEY` alone unlocks all of these. Switching
+is a reorder in `rates.json` under `routing` — the router takes the first candidate
+that is configured, available and **verified**, so a model with a lapsed price is
+demoted automatically rather than taking production down with it.
+
+All prices verified **2026-08-31** from the fal model pages; schemas from each
+endpoint's OpenAPI document.
+
+### Video — all image-to-video, so the persona's face carries
+
+| Model | Price | 8s ad | Duration | Notes |
+|---|---|---|---|---|
+| `minimax/h3-max/image-to-video` | $0.025–0.04/s | **$0.32** | any int | Cheapest. **Promo lapses 2026-09-01** |
+| `fal-ai/wan-25-preview/image-to-video` | $0.05/$0.10/$0.15 per s | $1.50 | 5 or 10 only | **Takes `audio_url`** — does lipsync too |
+| `fal-ai/kling-video/v2.5-turbo/pro/…` | $0.07/s | $0.70 | 5 or 10 only | Volume workhorse; no resolution tier |
+| `fal-ai/bytedance/seedance/v1/pro/…` | ~$0.124/s @1080p | $0.99 | 2–12 | Premium; see the pricing caveat below |
+| `fal-ai/veo3.1/image-to-video` | $0.20/s | $1.60 | 4/6/8 | Highest quality. `generate_audio` forced off |
+| `fal-ai/bytedance/omnihuman` | $0.14/s | $1.12 | audio ≤30s | Audio-driven avatar; takes no prompt |
+
+### Image
+
+| Model | Price | Kind |
+|---|---|---|
+| `fal-ai/flux/schnell` | $0.003/MP | text-to-image |
+| `fal-ai/qwen-image` | $0.02/MP | text-to-image, better at legible text |
+| `fal-ai/bytedance/seedream/v4/text-to-image` | $0.03/image | text-to-image, flat per-image |
+| `fal-ai/flux/dev/image-to-image` | $0.03/MP | identity-preserving |
+| `fal-ai/nano-banana/edit` | $0.039/image | identity-preserving, conditions on a **list** |
+
+### Three things this catalogue forced into the adapter
+
+**`duration` is not always an integer.** minimax takes `8`; wan, kling and seedance
+take the *string* `"8"`; veo takes `"8s"`. fal validates strictly and rejects the wrong
+shape rather than coercing it, so each rate declares `duration_format` and the adapter
+serialises accordingly. This was a live bug — any of the four would have returned HTTP
+400 on a billed attempt.
+
+**Some models take a list of references.** `nano-banana/edit` wants `image_urls`, not
+`image_url`. Rates declare `reference_field`. That list form is also the natural way to
+condition on a whole reference pack rather than one plate.
+
+**Veo generates its own audio by default.** Left on, it invents a different voice on
+every clip — which kills the persistent-voice pipeline — *and* doubles the price to
+$0.40/s. `generate_audio` is pinned `false` in its params, with a test asserting it.
+
+### Caveats worth knowing before you route to them
+
+- **Fixed durations change the draft economics.** wan and kling only emit 5s or 10s, so
+  a 3s draft is **billed as 5s**. `job preview` already reports the draft as a
+  percentage of the final and warns above 50% — on kling it is exactly 50%, because
+  there is no cheaper resolution tier to draft at.
+- **Seedance's real pricing is token-based** — `(h × w × fps × duration) / 1024` at
+  $2.5 per million. The table holds $0.124/s, derived from fal's own quoted "$0.62 per
+  1080p 5 second video", so **the 480p draft estimate is wrong**. Cost drift will flag
+  it. Verify before routing drafts there.
+- **OmniHuman takes no prompt.** Framing and action come entirely from the reference
+  plate, so it is a lipsync stage, not a general renderer.
+
+## The default video model: `minimax/h3-max/image-to-video`
 
 Configured in `rates.json`. Schema and pricing read from the fal model page.
 
@@ -220,6 +280,46 @@ than discovered after paying for a render of the wrong face.
 
 ---
 
+## Scripts — Claude writes the line, not the camera
+
+`app/scripts.py` turns a scene description into two artifacts, kept separate as the
+platform SOP requires:
+
+- **`dialogue`** — the spoken line, written by Claude in the persona's voice
+- **`visual_direction`** — what the camera sees; one or two sentences
+
+**The visual prompt stays deterministic.** `app/prompts.py` still owns shot, lens,
+lighting, framing and grade, and the model is explicitly told its lens and lighting
+suggestions will be discarded. This is the point: a re-draft is only a real comparison
+if the same brief produces the same technical prompt. Nobody needs creative variation
+in "28mm equivalent, eye-level".
+
+**The line reaches the model verbatim.** `to_brief()` puts the dialogue in quotes, and
+`structure()` extracts quoted text unchanged — so the line an operator approved is the
+line the video model is told to say, character for character.
+`tests/test_scripts.py` pins both properties.
+
+```bash
+POST /api/scripts        # {persona_id, scene, platform, duration_s, product, tone}
+GET  /api/scripts/preview
+```
+
+**A script is a metered call.** It reserves and settles through the same ledger and the
+same per-client cap as a render, with `stage='script'`. At roughly a cent against
+$0.32–$1.50 for the video it feeds, the reason to meter it is the invariant — every
+paid call gets a row before it fires — not the money. Unlike a render, the cost is
+known exactly: `settle()` uses measured token usage rather than the flat reservation
+estimate.
+
+**Without `ANTHROPIC_API_KEY` the app is unaffected.** The Creator shows the button
+disabled with a note, and you write the line yourself as before. In dry run a mock
+writer returns deterministic placeholder text that is *obviously* fake, so nothing
+plausible-looking can be shipped by accident.
+
+Configure with `KALVID_SCRIPT_MODEL` (default `claude-opus-5`) and
+`KALVID_SCRIPT_EFFORT` (default `medium` — short-form creative copy does not repay
+deep reasoning).
+
 ## Images and the asset library
 
 A video needs a face to hold onto. Making one used to mean hosting an image somewhere
@@ -268,6 +368,37 @@ job. `tests/test_images.py` pins this.
 Existing databases are migrated in place on startup by `app/schema_upgrade.py`, which
 is idempotent. SQLite cannot alter a `CHECK` constraint, so the table is rebuilt with
 foreign keys disabled for the swap — the `budget_events` audit trail survives.
+
+### Identity versioning — locked, and never overwritten
+
+A persona's reference image is the single input that decides who appears on screen.
+It is therefore **immutable once locked**. Editing it does not overwrite anything; it
+cuts the next version, supersedes the old one, and leaves every job pinned to the
+version it was briefed against.
+
+```bash
+GET  /api/personas/{id}/versions      # full history: current, open draft, all versions
+POST /api/personas/{id}/versions      # cut v(n+1); the previous is superseded
+```
+
+The property that matters: **a job re-drafted after an identity change renders the
+person it was briefed for, not whoever the persona has since become.** `jobs.py`
+reads `identity_strategy` / `reference_image_url` / `identity_lock_id` from the
+job's pinned `identity_versions` row, never from the live `personas` row.
+`tests/test_identity_versions.py` pins this by name.
+
+`personas.*` is kept in sync with the current locked version, but only as a cache of
+"who she is now". The version rows are the record of what each render actually used.
+
+Promoting an asset to the locked face (`POST /api/assets/{id}/primary`) cuts a version
+rather than mutating the column — that call used to overwrite it in place, which
+silently rewrote the provenance of everything already delivered under the old face.
+An identity that could not generate cannot be locked at all: it is refused where it is
+still free to fix.
+
+`assets.identity_version_id` records which identity was current when a still was made.
+That is provenance, not a preservation order — an ordinary still stays deletable. Only
+a canonical `plate` backing a locked version is protected.
 
 ### Saved assets
 

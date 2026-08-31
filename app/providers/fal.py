@@ -54,11 +54,17 @@ class FalProvider(Provider):
         if req.reference_image_url:
             # The persona's locked still. For an image-to-video model this is what
             # carries the face across clips, and it also sets the output aspect ratio.
-            candidate["image_url"] = req.reference_image_url
+            # Editing models (nano-banana) take a LIST under a different key.
+            if req.reference_field == "image_urls":
+                candidate["image_urls"] = [req.reference_image_url]
+            else:
+                candidate["image_url"] = req.reference_image_url
         if req.end_image_url:
             candidate["end_image_url"] = req.end_image_url
         if req.kind == "video" and req.duration_s:
-            candidate["duration"] = int(req.duration_s)
+            # NOT always an int. wan/kling/seedance want "5"; veo wants "8s". fal
+            # rejects the wrong shape outright rather than coercing.
+            candidate["duration"] = req.duration_value()
         if req.resolution:
             candidate["resolution"] = req.resolution
         else:

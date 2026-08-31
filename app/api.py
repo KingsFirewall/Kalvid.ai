@@ -7,11 +7,12 @@ from __future__ import annotations
 import json
 from datetime import date
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
-from . import db, images, jobs, ledger
+from . import db, images, jobs, ledger, scripts
 from .config import settings
+from . import identity as identity_mod
 from .identity import STRATEGIES, IdentityBinding
 from .prompts import structure
 from .rates import UnverifiedRate, rate_table
@@ -64,6 +65,7 @@ class AssetIn(BaseModel):
     persona_id: int | None = None
     url: str
     label: str = ""
+    plate: str | None = None
 
 
 class ActionIn(BaseModel):
@@ -188,6 +190,46 @@ def get_persona(persona_id: int):
         "SELECT id, brief, status, created_at FROM jobs WHERE persona_id=? ORDER BY id DESC",
         (persona_id,)))
     return d
+
+
+class IdentityEditIn(BaseModel):
+    reference_image_url: str | None = None
+    identity_lock_id: str | None = None
+    identity_strategy: str | None = None
+    character_sheet: str | None = None
+    voice_profile: str | None = None
+    notes: str | None = None
+    locked_by: str = "operator"
+
+
+@api.get("/personas/{persona_id}/versions")
+def persona_versions(persona_id: int):
+    """Full identity history. Locked versions are immutable; edits create the next."""
+    if db.query_one("SELECT 1 FROM personas WHERE id=?", (persona_id,)) is None:
+        raise HTTPException(404, "persona not found")
+    return {
+        "persona_id": persona_id,
+        "current": identity_mod.current_version(persona_id),
+        "draft": identity_mod.draft_version(persona_id),
+        "versions": identity_mod.versions(persona_id),
+    }
+
+
+@api.post("/personas/{persona_id}/versions", status_code=201)
+def edit_identity(persona_id: int, payload: IdentityEditIn):
+    """Cut a new identity version. The previous one is superseded, never overwritten."""
+    changes = {k: v for k, v in payload.model_dump().items()
+               if k != "locked_by" and v is not None}
+    if not changes:
+        raise HTTPException(422, "no changes given")
+    if "identity_strategy" in changes and changes["identity_strategy"] not in STRATEGIES:
+        raise HTTPException(422, f"identity_strategy must be one of {STRATEGIES}")
+    try:
+        return identity_mod.edit(persona_id, payload.locked_by, **changes)
+    except identity_mod.IdentityLocked as exc:
+        raise HTTPException(422, str(exc))
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
 
 
 # ---------------------------------------------------------------- jobs
@@ -351,6 +393,46 @@ def reject(job_id: int, payload: ActionIn = Body(default=ActionIn())):
     return get_job(job_id)
 
 
+# ---------------------------------------------------------------- scripts
+
+class ScriptIn(BaseModel):
+    persona_id: int
+    scene: str
+    platform: str = "tiktok"
+    duration_s: int = Field(8, ge=1, le=120)
+    product: str = ""
+    tone: str = ""
+    override_by: str | None = None
+
+
+@api.get("/scripts/preview")
+def preview_script(persona_id: int | None = None):
+    """Whether script writing is available, and what one costs."""
+    return scripts.preview(persona_id or 0)
+
+
+@api.post("/scripts", status_code=201)
+def write_script(payload: ScriptIn):
+    """Claude writes the dialogue; the visual prompt stays deterministic."""
+    try:
+        script = scripts.generate(
+            persona_id=payload.persona_id, scene=payload.scene,
+            platform=payload.platform, duration_s=payload.duration_s,
+            product=payload.product, tone=payload.tone,
+            override_by=payload.override_by)
+    except scripts.ScriptError as exc:
+        raise HTTPException(422, str(exc))
+    except ledger.BudgetExceeded as exc:
+        raise HTTPException(402, str(exc))
+    except UnverifiedRate as exc:
+        raise HTTPException(412, str(exc))
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+    # The brief is what the job pipeline actually consumes, so hand it back ready to use.
+    script["brief"] = scripts.to_brief(script)
+    return script
+
+
 # ---------------------------------------------------------------- stills & assets
 
 @api.post("/images/preview")
@@ -391,13 +473,84 @@ def get_assets(persona_id: int | None = None, client_id: int | None = None):
     return images.list_assets(persona_id=persona_id, client_id=client_id)
 
 
+@api.post("/assets/upload", status_code=201)
+async def upload_asset(
+    file: UploadFile = File(...),
+    persona_id: int | None = Form(None),
+    client_id: int | None = Form(None),
+    plate: str | None = Form(None),
+    label: str = Form(""),
+):
+    """Upload an image and file it against an influencer.
+
+    Identity plates land in the persona's OPEN DRAFT — uploading a picture must never
+    silently rewrite a locked identity that work has already been rendered against.
+    Wardrobe and product assets are the variable layer and are attached to no version.
+    """
+    data = await file.read()
+    try:
+        return images.upload_file(
+            data=data, content_type=file.content_type or "",
+            filename=file.filename or "", client_id=client_id,
+            persona_id=persona_id, plate=(plate or None), label=label)
+    except images.ImageError as exc:
+        raise HTTPException(422, str(exc))
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@api.get("/personas/{persona_id}/sheet")
+def get_sheet(persona_id: int):
+    """The character sheet on the current locked version, plus any open draft."""
+    current = identity_mod.current_version(persona_id)
+    draft = identity_mod.draft_version(persona_id)
+    return {
+        "persona_id": persona_id,
+        "fields": identity_mod.SHEET_FIELDS,
+        "locked": identity_mod.sheet(current) if current else {},
+        "locked_version": current["version"] if current else None,
+        "draft": identity_mod.sheet(draft) if draft else None,
+        "draft_version": draft["version"] if draft else None,
+    }
+
+
+@api.post("/personas/{persona_id}/sheet")
+def edit_sheet(persona_id: int, payload: dict = Body(...)):
+    """Write the character sheet into the OPEN DRAFT. Does not touch a locked version.
+
+    Editing is deliberately two steps — draft then lock — so a typo does not cut a
+    new identity version, but a real change still has to be committed explicitly.
+    """
+    unknown = set(payload) - set(identity_mod.SHEET_FIELDS)
+    if unknown:
+        raise HTTPException(422, f"unknown character-sheet field(s): {', '.join(sorted(unknown))}")
+    try:
+        draft = identity_mod.open_draft(
+            persona_id, character_sheet=json.dumps(payload, indent=2))
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+    return {"draft_version": draft["version"], "sheet": identity_mod.sheet(draft)}
+
+
+@api.post("/personas/{persona_id}/lock")
+def lock_identity(persona_id: int, payload: ActionIn = Body(default=ActionIn())):
+    """Freeze the open draft as the next identity version."""
+    try:
+        return identity_mod.lock(persona_id, payload.override_by or settings.operator)
+    except identity_mod.IdentityLocked as exc:
+        raise HTTPException(422, str(exc))
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+
+
 @api.post("/assets", status_code=201)
 def add_asset(payload: AssetIn):
     """Register an image we did not generate. Costs nothing."""
     try:
         aid = images.save_upload(client_id=payload.client_id,
                                  persona_id=payload.persona_id,
-                                 url=payload.url, label=payload.label)
+                                 url=payload.url, label=payload.label,
+                                 plate=payload.plate)
     except images.ImageError as exc:
         raise HTTPException(422, str(exc))
     except KeyError as exc:

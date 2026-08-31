@@ -181,9 +181,11 @@ def init_db() -> None:
         # already exists, so an old `generations` keeps its old columns — and the
         # new CREATE INDEX on client_id in the schema would then fail outright.
         # On a fresh database this is a no-op and the schema below does the work.
-        from .schema_upgrade import upgrade
+        from .schema_upgrade import upgrade, upgrade_after_schema
         upgrade()
         executescript(schema_sql())
+        # Backfills that need the new tables to exist first.
+        upgrade_after_schema()
         _initialised = True
 
 

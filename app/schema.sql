@@ -33,9 +33,37 @@ CREATE TABLE IF NOT EXISTS personas (
     UNIQUE (client_id, name)
 );
 
+-- Identity is immutable once locked. An edit does not overwrite a face; it creates
+-- the next version, and everything already rendered stays pinned to the version it
+-- was made with. Without this, changing a persona's reference silently rewrites the
+-- provenance of every clip ever delivered under the old one.
+CREATE TABLE IF NOT EXISTS identity_versions (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    persona_id          INTEGER NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+    version             INTEGER NOT NULL,
+    status              TEXT    NOT NULL DEFAULT 'draft'
+                        CHECK (status IN ('draft','locked','superseded')),
+    -- The frozen snapshot: everything that determines who she is.
+    identity_strategy   TEXT    NOT NULL DEFAULT 'reference_image'
+                        CHECK (identity_strategy IN ('reference_image','lora','character_id')),
+    reference_image_url TEXT,           -- the identity plate for THIS version
+    identity_lock_id    TEXT,
+    character_sheet     TEXT,           -- descriptive metadata (JSON); supports the
+                                        -- pack, never replaces it — text can't hold a face
+    voice_profile       TEXT,
+    notes               TEXT,
+    locked_at           TEXT,
+    locked_by           TEXT,
+    created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (persona_id, version)
+);
+
 CREATE TABLE IF NOT EXISTS jobs (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     persona_id          INTEGER NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+    -- Pinned at creation. The render uses THIS identity even if the persona has since
+    -- moved to a later version.
+    identity_version_id INTEGER REFERENCES identity_versions(id) ON DELETE SET NULL,
     brief               TEXT    NOT NULL,
     structured_prompt   TEXT,
     platform            TEXT    NOT NULL DEFAULT 'tiktok',
@@ -61,7 +89,8 @@ CREATE TABLE IF NOT EXISTS generations (
     -- jobs -> personas, which silently excluded any generation without a job. The
     -- cap must count every paid call, so the owning client is recorded directly.
     client_id           INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-    stage               TEXT    NOT NULL CHECK (stage IN ('draft','final','still')),
+    identity_version_id INTEGER REFERENCES identity_versions(id) ON DELETE SET NULL,
+    stage               TEXT    NOT NULL CHECK (stage IN ('draft','final','still','script')),
     provider            TEXT    NOT NULL,
     model               TEXT    NOT NULL,
     request_payload     TEXT,
@@ -100,6 +129,11 @@ CREATE TABLE IF NOT EXISTS assets (
     client_id           INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
     persona_id          INTEGER REFERENCES personas(id) ON DELETE CASCADE,
     generation_id       INTEGER REFERENCES generations(id) ON DELETE SET NULL,
+    identity_version_id INTEGER REFERENCES identity_versions(id) ON DELETE SET NULL,
+    -- Which canonical plate this is, per the reference-pack spec. NULL = an ordinary
+    -- still, not part of the identity lock.
+    plate               TEXT    CHECK (plate IN ('identity','turnaround','detail',
+                                                 'expression','wardrobe','product')),
     kind                TEXT    NOT NULL DEFAULT 'image' CHECK (kind IN ('image','video')),
     source              TEXT    NOT NULL DEFAULT 'generated'
                         CHECK (source IN ('generated','uploaded')),
@@ -114,6 +148,7 @@ CREATE INDEX IF NOT EXISTS idx_gen_job     ON generations(job_id);
 CREATE INDEX IF NOT EXISTS idx_gen_client  ON generations(client_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_assets_per  ON assets(persona_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_assets_cli  ON assets(client_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_iv_persona   ON identity_versions(persona_id, version);
 CREATE INDEX IF NOT EXISTS idx_gen_status  ON generations(status);
 CREATE INDEX IF NOT EXISTS idx_gen_created ON generations(created_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_persona ON jobs(persona_id);

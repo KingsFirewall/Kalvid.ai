@@ -65,8 +65,62 @@
       <p class="text-[12.5px] text-on-surface-variant mb-4">
         Plain English. Put the spoken line in quotes and it's carried through verbatim.
       </p>
-      <textarea name="brief" rows="5" required class="field text-[15px] leading-relaxed"
+      <textarea name="brief" id="brief" rows="5" required class="field text-[15px] leading-relaxed"
         placeholder='She unboxes the serum on a bright bathroom counter and says "my skin has never looked this good"'>{{ prefill.brief }}</textarea>
+
+      <!-- Claude writes the line. The camera directions stay deterministic — see
+           app/scripts.py for why that split is deliberate. -->
+      <div class="mt-4 rounded-xl border border-primary/20 bg-primary/[0.05] p-4">
+        <div class="flex items-center justify-between gap-3 mb-2">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-[19px] text-primary">auto_awesome</span>
+            <h4 class="font-headline-md text-[15px] text-on-surface">Write it with Claude</h4>
+          </div>
+          {% if script.dry_run %}
+            <span class="chip chip-ok">$0 dry run</span>
+          {% elif not script.configured %}
+            <span class="chip chip-warn">no API key</span>
+          {% else %}
+            <span class="chip chip-spend">~${{ '%.3f'|format(script.estimate_usd) }}</span>
+          {% endif %}
+        </div>
+
+        {% if not script.configured and not script.dry_run %}
+          <p class="text-[12.5px] text-on-surface-variant">
+            Set <code class="text-primary">ANTHROPIC_API_KEY</code> in <code>.env</code> to
+            enable this. Until then, write the line yourself above — the rest of the
+            pipeline is unaffected.
+          </p>
+        {% else %}
+          <p class="text-[12.5px] text-on-surface-variant mb-3">
+            Describe the scene in plain words. Claude writes the spoken line; the shot,
+            lens and lighting stay deterministic either way.
+          </p>
+          <textarea id="scene" rows="2" class="field text-[14px]"
+            placeholder="She's just got the serum in the post and is trying it for the first time"></textarea>
+          <div class="flex gap-2 mt-2">
+            <input id="product" class="field text-[13px] flex-1" placeholder="Product (optional)">
+            <input id="tone" class="field text-[13px] flex-1" placeholder="Tone (optional) — e.g. dry, excited">
+          </div>
+          <button type="button" id="write-script"
+                  class="btn-ghost rounded-lg py-2.5 px-4 mt-3 flex items-center gap-2 text-label-md font-label-md">
+            <span class="material-symbols-outlined text-[18px]">edit_note</span>
+            Write the line
+          </button>
+          <div id="script-out" class="hidden mt-3 rounded-lg bg-black/20 border border-white/10 p-3.5">
+            <div class="text-[11px] uppercase tracking-wider text-on-surface-variant mb-1.5">Claude wrote</div>
+            <p id="script-dialogue" class="text-[14px] text-on-surface leading-relaxed"></p>
+            <p id="script-why" class="text-[11.5px] text-on-surface-variant mt-2"></p>
+            <div class="flex items-center gap-2 mt-3">
+              <button type="button" id="use-script"
+                      class="btn-primary rounded-lg py-2 px-4 flex items-center gap-1.5 text-white text-[12.5px] font-semibold">
+                <span class="material-symbols-outlined text-[16px]">check</span> Use this
+              </button>
+              <span id="script-meta" class="text-[11px] text-on-surface-variant"></span>
+            </div>
+          </div>
+        {% endif %}
+      </div>
 
       <div class="flex flex-wrap gap-2 mt-3">
         {% for hint in ['unboxing', 'before / after', 'get ready with me', 'testimonial', 'problem → solution'] %}
@@ -128,6 +182,62 @@
 </form>
 
 {% endif %}
+
+<script>
+// The script writer. Kept out of the main form submit on purpose: writing a line is a
+// separate, separately-billed action, and the operator edits it before anything runs.
+(function () {
+  const btn = document.getElementById('write-script');
+  if (!btn) return;
+  const out = document.getElementById('script-out');
+  const dialogueEl = document.getElementById('script-dialogue');
+  const whyEl = document.getElementById('script-why');
+  const metaEl = document.getElementById('script-meta');
+  const briefEl = document.getElementById('brief');
+  let latest = null;
+
+  btn.addEventListener('click', async () => {
+    const persona = document.querySelector('input[name=persona_id]:checked');
+    const scene = document.getElementById('scene').value.trim();
+    if (!persona) return toast('Pick an influencer first', 'err');
+    if (!scene) return toast('Describe the scene first', 'err');
+
+    btn.disabled = true;
+    const original = btn.innerHTML;
+    btn.innerHTML = '<span class="w-4 h-4 rounded-full border-2 border-current/30 border-t-current animate-spin"></span> writing…';
+    try {
+      latest = await post('/api/scripts', {
+        persona_id: Number(persona.value),
+        scene: scene,
+        platform: document.getElementById('platform').value,
+        duration_s: Number(document.getElementById('target_duration').value),
+        product: document.getElementById('product').value,
+        tone: document.getElementById('tone').value,
+      });
+      dialogueEl.textContent = '\u201C' + latest.dialogue + '\u201D';
+      whyEl.textContent = latest.why_it_works || '';
+      metaEl.textContent = [
+        latest.word_count ? latest.word_count + ' words' : null,
+        latest.model,
+        latest.cost_usd ? '$' + latest.cost_usd.toFixed(4) : '$0',
+      ].filter(Boolean).join(' · ');
+      out.classList.remove('hidden');
+    } catch (err) {
+      toast(err.message, 'err');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  });
+
+  document.getElementById('use-script').addEventListener('click', () => {
+    if (!latest) return;
+    briefEl.value = latest.brief;
+    briefEl.focus();
+    toast('Brief filled in — edit it before you generate', 'ok');
+  });
+})();
+</script>
 
 {% if jobs %}
 <section class="space-y-4">

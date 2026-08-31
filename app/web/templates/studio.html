@@ -1,6 +1,62 @@
 {% extends "base.html" %}
 {% import "_macros.html" as ui %}
-{% block title %}Influencer Studio — Kalvid AI{% endblock %}
+{% block title %}Influencer Studio — Kalvid AI<script>
+// Asset upload. Multipart, so it does not go through the JSON form helper.
+(function () {
+  const zone = document.getElementById('dropzone');
+  if (!zone) return;
+  const input = document.getElementById('asset-file');
+  const plateEl = document.getElementById('asset-plate');
+  const labelEl = document.getElementById('asset-label');
+  const noteEl = document.getElementById('plate-note');
+  const progress = document.getElementById('upload-progress');
+  const personaId = {{ selected.id }};
+  const IDENTITY_PLATES = {{ selected.identity_plates|list|tojson }};
+
+  plateEl.addEventListener('change', () => {
+    noteEl.classList.toggle('hidden', !IDENTITY_PLATES.includes(plateEl.value));
+  });
+
+  zone.addEventListener('click', () => input.click());
+  ['dragenter', 'dragover'].forEach((e) => zone.addEventListener(e, (ev) => {
+    ev.preventDefault();
+    zone.classList.add('border-primary/60', 'bg-white/[0.05]');
+  }));
+  ['dragleave', 'drop'].forEach((e) => zone.addEventListener(e, (ev) => {
+    ev.preventDefault();
+    zone.classList.remove('border-primary/60', 'bg-white/[0.05]');
+  }));
+  zone.addEventListener('drop', (ev) => send(ev.dataTransfer.files));
+  input.addEventListener('change', () => send(input.files));
+
+  async function send(files) {
+    if (!files || !files.length) return;
+    progress.classList.remove('hidden');
+    let done = 0, failed = 0;
+    for (const file of files) {
+      progress.textContent = `Uploading ${file.name}… (${done + 1}/${files.length})`;
+      const body = new FormData();
+      body.append('file', file);
+      body.append('persona_id', personaId);
+      if (plateEl.value) body.append('plate', plateEl.value);
+      if (labelEl.value) body.append('label', labelEl.value);
+      try {
+        const res = await fetch('/api/assets/upload', { method: 'POST', body });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+        done++;
+      } catch (err) {
+        failed++;
+        toast(`${file.name}: ${err.message}`, 'err');
+      }
+    }
+    progress.textContent = `${done} uploaded${failed ? `, ${failed} failed` : ''}.`;
+    if (done) setTimeout(() => location.reload(), 600);
+  }
+})();
+</script>
+
+{% endblock %}
 {% block body %}
 
 <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-2">
@@ -153,6 +209,12 @@
         <div class="min-w-0 flex-1">
           <h3 class="font-headline-lg text-[24px] text-on-surface">{{ selected.name }}</h3>
           <div class="flex items-center gap-2 flex-wrap mt-2">
+            {% if selected.current_version %}
+              <span class="chip chip-primary" title="Locked {{ selected.current_version.locked_at }} by {{ selected.current_version.locked_by }}">
+                <span class="material-symbols-outlined text-[13px]">lock</span>
+                identity v{{ selected.current_version.version }}
+              </span>
+            {% endif %}
             <span class="chip chip-secondary">{{ selected.identity_strategy }}</span>
             <span class="chip {{ 'chip-ok' if selected.ready else 'chip-warn' }}">
               {{ 'Ready to generate' if selected.ready else 'Identity incomplete' }}
@@ -209,6 +271,158 @@
       </section>
     </div>
 
+    <!-- Character sheet: descriptive metadata that SUPPORTS the reference pack.
+         Editing writes to a draft; locking cuts the next identity version. -->
+    <section class="glass-panel rounded-2xl p-5">
+      <div class="flex items-center justify-between gap-3 mb-1">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[19px] text-primary">description</span>
+          <h4 class="font-headline-md text-[16px] text-on-surface">Character sheet</h4>
+          {% if selected.draft %}
+            <span class="chip chip-warn">draft v{{ selected.draft.version }} unlocked</span>
+          {% endif %}
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" data-toggle="#sheet-form" class="chip hover:brightness-125">
+            <span class="material-symbols-outlined text-[14px]">edit</span> Edit
+          </button>
+          {% if selected.draft %}
+            <button type="button" data-action="/api/personas/{{ selected.id }}/lock"
+                    data-confirm="Lock this as identity v{{ selected.draft.version }}?&#10;&#10;It becomes immutable. Work already rendered stays pinned to its own version."
+                    class="chip chip-primary hover:brightness-125">
+              <span class="material-symbols-outlined text-[14px]">lock</span>
+              Lock v{{ selected.draft.version }}
+            </button>
+          {% endif %}
+        </div>
+      </div>
+      <p class="text-[12.5px] text-on-surface-variant mb-4">
+        Metadata that reinforces the reference pack and drives script and voice
+        generation. It supports the plates — it never replaces them, because text
+        cannot hold a face.
+      </p>
+
+      {% if selected.sheet %}
+        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+          {% for f in selected.sheet_fields %}
+            {% if selected.sheet.get(f) %}
+            <div class="rounded-lg bg-white/[0.03] px-3.5 py-2.5">
+              <dt class="text-[10.5px] uppercase tracking-wider text-on-surface-variant">{{ selected.sheet_labels[f] }}</dt>
+              <dd class="text-[13px] text-on-surface mt-0.5">{{ selected.sheet.get(f) }}</dd>
+            </div>
+            {% endif %}
+          {% endfor %}
+        </dl>
+      {% else %}
+        <p class="text-[13px] text-on-surface-variant mb-3">
+          Not written yet. Claude uses this to write in {{ selected.name }}'s voice.
+        </p>
+      {% endif %}
+
+      <form id="sheet-form" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-white/5"
+            data-post="/api/personas/{{ selected.id }}/sheet">
+        {% for f in selected.sheet_fields %}
+        <div{% if f == 'backstory' %} class="sm:col-span-2"{% endif %}>
+          <label class="field-label" for="sheet-{{ f }}">{{ selected.sheet_labels[f] }}</label>
+          <input name="{{ f }}" id="sheet-{{ f }}" class="field text-[13px]"
+                 value="{{ selected.sheet.get(f, '') }}">
+        </div>
+        {% endfor %}
+        <div class="sm:col-span-2 flex items-center gap-3">
+          <button type="submit" class="btn-primary rounded-lg py-2.5 px-5 flex items-center gap-2 text-white text-label-md font-label-md">
+            <span class="material-symbols-outlined text-[18px]">save</span> Save to draft
+          </button>
+          <span class="text-[11.5px] text-on-surface-variant">
+            Saves to an unlocked draft. Lock it above to cut the next version.
+          </span>
+        </div>
+      </form>
+    </section>
+
+    <!-- Upload. Identity plates go to the draft; wardrobe is the variable layer. -->
+    <section class="glass-panel rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="material-symbols-outlined text-[19px] text-secondary">upload</span>
+        <h4 class="font-headline-md text-[16px] text-on-surface">Upload an asset</h4>
+      </div>
+      <p class="text-[12.5px] text-on-surface-variant mb-4">
+        Reference plates, or props like glasses and a wristwatch. Capture plates on a
+        flat neutral background with soft shadowless light — any lighting baked into a
+        plate follows {{ selected.name }} into every scene afterwards.
+      </p>
+
+      <div id="dropzone" class="rounded-xl border border-dashed border-white/15 px-5 py-8 text-center transition-colors cursor-pointer hover:border-primary/40 hover:bg-white/[0.03]">
+        <span class="material-symbols-outlined text-[32px] text-on-surface-variant/50">cloud_upload</span>
+        <p class="text-[13.5px] text-on-surface mt-2">Drag an image here, or click to browse</p>
+        <p class="text-[11.5px] text-on-surface-variant mt-1">PNG, JPEG, WebP, GIF or AVIF · max 15&nbsp;MB</p>
+        <input type="file" id="asset-file" accept="image/*" multiple class="hidden">
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr] gap-3 mt-3">
+        <div>
+          <label class="field-label" for="asset-plate">What is it?</label>
+          <select id="asset-plate" class="field">
+            <option value="">Just a still — not part of the pack</option>
+            {% for k, label in selected.plate_labels.items() %}
+              <option value="{{ k }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="field-label" for="asset-label">Label</label>
+          <input id="asset-label" class="field" placeholder="e.g. round tortoiseshell glasses">
+        </div>
+      </div>
+      <p id="plate-note" class="hidden text-[11.5px] text-warn mt-2 flex items-start gap-1.5">
+        <span class="material-symbols-outlined text-[15px] shrink-0">info</span>
+        <span>Identity plates go into an unlocked draft. Nothing already rendered changes until you lock it.</span>
+      </p>
+      <div id="upload-progress" class="hidden mt-3 text-[12.5px] text-on-surface-variant"></div>
+    </section>
+
+    <!-- Wardrobe & props: the variable layer, deliberately its own grid. -->
+    <section class="glass-panel rounded-2xl p-5">
+      <div class="flex items-center justify-between gap-3 mb-1">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[19px] text-tertiary">checkroom</span>
+          <h4 class="font-headline-md text-[16px] text-on-surface">Wardrobe &amp; props</h4>
+          <span class="chip">{{ selected.wardrobe|length }}</span>
+        </div>
+      </div>
+      <p class="text-[12.5px] text-on-surface-variant mb-4">
+        The swappable layer. "Black dress" gives a different dress every time — a stored
+        plate gives the same one. These are never frozen into an identity version.
+      </p>
+
+      {% if not selected.wardrobe %}
+        <div class="rounded-xl border border-dashed border-white/12 px-5 py-7 text-center">
+          <span class="material-symbols-outlined text-[28px] text-on-surface-variant/40">checkroom</span>
+          <p class="text-[13px] text-on-surface-variant mt-2">
+            No wardrobe items yet. Upload glasses, a watch, a jacket — anything that
+            should look identical across clips.
+          </p>
+        </div>
+      {% else %}
+        <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+          {% for a in selected.wardrobe %}
+          <div class="relative rounded-xl overflow-hidden border border-white/10 group bg-surface-container-lowest">
+            <img src="{{ a.url }}" alt="{{ a.label or a.plate }}" loading="lazy"
+                 class="w-full aspect-square object-cover">
+            <span class="chip {{ 'chip-secondary' if a.plate == 'wardrobe' else 'chip-warn' }} absolute top-1.5 left-1.5 backdrop-blur-md text-[10px]">{{ a.plate }}</span>
+            <div class="absolute inset-x-0 bottom-0 p-1.5 bg-gradient-to-t from-black/90 to-transparent">
+              <p class="text-[10.5px] text-white/90 truncate">{{ a.label or 'untitled' }}</p>
+            </div>
+            <button type="button" data-action="/api/assets/{{ a.id }}" data-method="DELETE"
+                    data-confirm="Delete {{ a.label or 'this item' }}?"
+                    class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full grid place-items-center bg-black/50 backdrop-blur-md border border-white/20 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-danger">
+              <span class="material-symbols-outlined text-[13px]">delete</span>
+            </button>
+          </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </section>
+
     <!-- The saved-asset library: generate once, reuse forever. -->
     <section class="glass-panel rounded-2xl p-5">
       <div class="flex items-center justify-between gap-3 mb-1">
@@ -247,6 +461,8 @@
               <span class="absolute top-1.5 left-1.5 w-6 h-6 rounded-full grid place-items-center bg-primary text-on-primary" title="Locked face">
                 <span class="material-symbols-outlined text-[14px]">lock</span>
               </span>
+            {% elif a.plate %}
+              <span class="chip chip-primary absolute top-1.5 left-1.5 backdrop-blur-md text-[10px]">{{ a.plate }}</span>
             {% endif %}
             <div class="absolute inset-x-0 bottom-0 p-1.5 flex items-center gap-1 bg-gradient-to-t from-black/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
               {% if not a.is_primary %}
@@ -268,6 +484,39 @@
       {% endif %}
     </section>
 
+    {% if selected.versions and selected.versions|length %}
+    <section class="glass-panel rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="material-symbols-outlined text-[19px] text-primary">history</span>
+        <h4 class="font-headline-md text-[16px] text-on-surface">Identity history</h4>
+      </div>
+      <p class="text-[12.5px] text-on-surface-variant mb-4">
+        A locked version is never edited. Changing the face cuts the next one, and every
+        video already made stays pinned to the version it was rendered with.
+      </p>
+      <div class="space-y-2">
+        {% for v in selected.versions %}
+        <div class="flex items-center gap-3 rounded-lg border px-4 py-3
+             {{ 'border-primary/40 bg-primary/[0.06]' if v.status == 'locked'
+                else 'border-white/[0.07] bg-white/[0.02]' }}">
+          {% if v.reference_image_url %}
+            <img src="{{ v.reference_image_url }}" alt="v{{ v.version }}" loading="lazy"
+                 onerror="this.remove()"
+                 class="w-10 h-10 rounded-lg object-cover border border-white/15 shrink-0">
+          {% endif %}
+          <span class="font-semibold text-[13.5px] text-on-surface shrink-0">v{{ v.version }}</span>
+          <span class="chip {{ 'chip-ok' if v.status == 'locked'
+                              else ('chip-warn' if v.status == 'draft' else '') }}">{{ v.status }}</span>
+          <span class="text-[12px] text-on-surface-variant truncate flex-1">
+            {{ v.identity_strategy }}
+            {% if v.locked_at %} · locked {{ v.locked_at }}{% if v.locked_by %} by {{ v.locked_by }}{% endif %}{% endif %}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
     {% if selected.jobs %}
     <section class="glass-panel rounded-2xl p-5">
       <h4 class="font-headline-md text-[16px] text-on-surface mb-4">Jobs for {{ selected.name }}</h4>
@@ -285,5 +534,61 @@
   </div>
 </div>
 {% endif %}
+
+<script>
+// Asset upload. Multipart, so it does not go through the JSON form helper.
+(function () {
+  const zone = document.getElementById('dropzone');
+  if (!zone) return;
+  const input = document.getElementById('asset-file');
+  const plateEl = document.getElementById('asset-plate');
+  const labelEl = document.getElementById('asset-label');
+  const noteEl = document.getElementById('plate-note');
+  const progress = document.getElementById('upload-progress');
+  const personaId = {{ selected.id }};
+  const IDENTITY_PLATES = {{ selected.identity_plates|list|tojson }};
+
+  plateEl.addEventListener('change', () => {
+    noteEl.classList.toggle('hidden', !IDENTITY_PLATES.includes(plateEl.value));
+  });
+
+  zone.addEventListener('click', () => input.click());
+  ['dragenter', 'dragover'].forEach((e) => zone.addEventListener(e, (ev) => {
+    ev.preventDefault();
+    zone.classList.add('border-primary/60', 'bg-white/[0.05]');
+  }));
+  ['dragleave', 'drop'].forEach((e) => zone.addEventListener(e, (ev) => {
+    ev.preventDefault();
+    zone.classList.remove('border-primary/60', 'bg-white/[0.05]');
+  }));
+  zone.addEventListener('drop', (ev) => send(ev.dataTransfer.files));
+  input.addEventListener('change', () => send(input.files));
+
+  async function send(files) {
+    if (!files || !files.length) return;
+    progress.classList.remove('hidden');
+    let done = 0, failed = 0;
+    for (const file of files) {
+      progress.textContent = `Uploading ${file.name}… (${done + 1}/${files.length})`;
+      const body = new FormData();
+      body.append('file', file);
+      body.append('persona_id', personaId);
+      if (plateEl.value) body.append('plate', plateEl.value);
+      if (labelEl.value) body.append('label', labelEl.value);
+      try {
+        const res = await fetch('/api/assets/upload', { method: 'POST', body });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+        done++;
+      } catch (err) {
+        failed++;
+        toast(`${file.name}: ${err.message}`, 'err');
+      }
+    }
+    progress.textContent = `${done} uploaded${failed ? `, ${failed} failed` : ''}.`;
+    if (done) setTimeout(() => location.reload(), 600);
+  }
+})();
+</script>
 
 {% endblock %}

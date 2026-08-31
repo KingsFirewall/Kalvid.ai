@@ -27,9 +27,32 @@ CREATE TABLE IF NOT EXISTS personas (
     UNIQUE (client_id, name)
 );
 
+-- Identity is immutable once locked. An edit does not overwrite a face; it creates
+-- the next version, and everything already rendered stays pinned to the version it
+-- was made with.
+CREATE TABLE IF NOT EXISTS identity_versions (
+    id                  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    persona_id          BIGINT      NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+    version             INTEGER     NOT NULL,
+    status              TEXT        NOT NULL DEFAULT 'draft'
+                        CHECK (status IN ('draft','locked','superseded')),
+    identity_strategy   TEXT        NOT NULL DEFAULT 'reference_image'
+                        CHECK (identity_strategy IN ('reference_image','lora','character_id')),
+    reference_image_url TEXT,
+    identity_lock_id    TEXT,
+    character_sheet     TEXT,
+    voice_profile       TEXT,
+    notes               TEXT,
+    locked_at           TIMESTAMPTZ,
+    locked_by           TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (persona_id, version)
+);
+
 CREATE TABLE IF NOT EXISTS jobs (
     id                  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     persona_id          BIGINT      NOT NULL REFERENCES personas(id) ON DELETE CASCADE,
+    identity_version_id BIGINT      REFERENCES identity_versions(id) ON DELETE SET NULL,
     brief               TEXT        NOT NULL,
     structured_prompt   TEXT,
     platform            TEXT        NOT NULL DEFAULT 'tiktok',
@@ -54,7 +77,8 @@ CREATE TABLE IF NOT EXISTS generations (
     -- jobs -> personas, which silently excluded any generation without a job. The
     -- cap must count every paid call, so the owning client is recorded directly.
     client_id           BIGINT      NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-    stage               TEXT        NOT NULL CHECK (stage IN ('draft','final','still')),
+    identity_version_id BIGINT      REFERENCES identity_versions(id) ON DELETE SET NULL,
+    stage               TEXT        NOT NULL CHECK (stage IN ('draft','final','still','script')),
     provider            TEXT        NOT NULL,
     model               TEXT        NOT NULL,
     request_payload     TEXT,
@@ -91,6 +115,9 @@ CREATE TABLE IF NOT EXISTS assets (
     client_id           BIGINT      NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
     persona_id          BIGINT      REFERENCES personas(id) ON DELETE CASCADE,
     generation_id       BIGINT      REFERENCES generations(id) ON DELETE SET NULL,
+    identity_version_id BIGINT      REFERENCES identity_versions(id) ON DELETE SET NULL,
+    plate               TEXT        CHECK (plate IN ('identity','turnaround','detail',
+                                                     'expression','wardrobe','product')),
     kind                TEXT        NOT NULL DEFAULT 'image' CHECK (kind IN ('image','video')),
     source              TEXT        NOT NULL DEFAULT 'generated'
                         CHECK (source IN ('generated','uploaded')),
@@ -105,6 +132,7 @@ CREATE INDEX IF NOT EXISTS idx_gen_job      ON generations(job_id);
 CREATE INDEX IF NOT EXISTS idx_gen_client   ON generations(client_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_assets_per   ON assets(persona_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_assets_cli   ON assets(client_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_iv_persona    ON identity_versions(persona_id, version);
 CREATE INDEX IF NOT EXISTS idx_gen_status   ON generations(status);
 CREATE INDEX IF NOT EXISTS idx_gen_created  ON generations(created_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_persona ON jobs(persona_id);
@@ -120,3 +148,4 @@ ALTER TABLE jobs          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE generations   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE budget_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE assets        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE identity_versions ENABLE ROW LEVEL SECURITY;

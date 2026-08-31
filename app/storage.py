@@ -141,3 +141,43 @@ def archive_output(source_url: str, *, client_name: str, job_id: int | None,
             log.warning("supabase upload failed for gen %s, keeping local copy: %s",
                         gen_id, exc)
     return str(local)
+
+
+# Browsers post bytes, not URLs. Uploaded reference plates go through the same durable
+# path as a render: local copy first (that alone survives everything), then Supabase.
+ALLOWED_UPLOAD_TYPES = {
+    "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg",
+    "image/webp": "webp", "image/gif": "gif", "image/avif": "avif",
+}
+MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+
+
+def store_upload(data: bytes, *, content_type: str, client_name: str,
+                 persona_id: int | None, asset_key: str) -> str:
+    """Persist an uploaded image. Returns the best available URL."""
+    ext = ALLOWED_UPLOAD_TYPES.get((content_type or "").split(";")[0].strip().lower())
+    if ext is None:
+        raise StorageError(
+            f"unsupported file type {content_type!r} — upload a PNG, JPEG, WebP, "
+            f"GIF or AVIF image")
+    if not data:
+        raise StorageError("the uploaded file was empty")
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise StorageError(
+            f"file is {len(data) / 1e6:.1f} MB; the limit is "
+            f"{MAX_UPLOAD_BYTES / 1e6:.0f} MB")
+
+    safe_client = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in client_name)
+    folder = f"persona-{persona_id}" if persona_id else "uploads"
+    rel = f"{safe_client}/{folder}/{asset_key}.{ext}"
+    local = settings.output_dir / rel
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_bytes(data)
+
+    if available():
+        try:
+            upload(local, rel)
+            return signed_url(rel)
+        except StorageError as exc:
+            log.warning("supabase upload failed for %s, keeping local copy: %s", rel, exc)
+    return str(local)

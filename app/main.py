@@ -11,9 +11,10 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, images, jobs, ledger
+from . import db, images, jobs, ledger, scripts
 from .api import api, system_status
 from .config import settings
+from . import identity as identity_mod
 from .identity import IdentityBinding
 from .rates import rate_table
 
@@ -163,6 +164,7 @@ def creator(request: Request, brief: str = "", platform: str = "", duration: int
     return templates.TemplateResponse(
         request, "creator.html",
         _ctx(request, personas=_persona_rows(), jobs=[dict(j) for j in open_jobs],
+             script=scripts.preview(0),
              prefill={"brief": brief, "platform": platform, "duration": duration}))
 
 
@@ -176,9 +178,25 @@ def studio(request: Request, persona: int | None = None):
         selected["jobs"] = [dict(j) for j in db.query(
             "SELECT id, brief, status, created_at FROM jobs WHERE persona_id=? "
             "ORDER BY id DESC", (selected["id"],))]
-        selected["assets"] = images.list_assets(persona_id=selected["id"])
-        for a in selected["assets"]:
+        selected["versions"] = identity_mod.versions(selected["id"])
+        selected["current_version"] = identity_mod.current_version(selected["id"])
+        # The two layers are shown separately on purpose: mixing a locked identity
+        # plate into the same grid as a pair of sunglasses is exactly the leak the
+        # platform spec warns about.
+        variable = identity_mod.VARIABLE_PLATES
+        selected["assets"] = images.list_assets(persona_id=selected["id"],
+                                                exclude_plates=variable)
+        selected["wardrobe"] = images.list_assets(persona_id=selected["id"],
+                                                  plates=variable)
+        for a in selected["assets"] + selected["wardrobe"]:
             a["url"] = media_url(a["url"]) or a["url"]
+        draft = identity_mod.draft_version(selected["id"])
+        selected["draft"] = draft
+        selected["sheet"] = identity_mod.sheet(draft or selected["current_version"] or {})
+        selected["sheet_fields"] = identity_mod.SHEET_FIELDS
+        selected["sheet_labels"] = identity_mod.SHEET_LABELS
+        selected["plate_labels"] = identity_mod.PLATE_LABELS
+        selected["identity_plates"] = identity_mod.IDENTITY_PLATES
     return templates.TemplateResponse(
         request, "studio.html",
         _ctx(request, personas=personas, selected=selected, clients=_client_rows()))
@@ -290,6 +308,11 @@ def settings_page(request: Request):
 def job_detail(request: Request, job_id: int):
     from .api import get_job, preview_job
     job = get_job(job_id)
+    if job.get("identity_version_id"):
+        try:
+            job["identity_version"] = identity_mod.get_version(job["identity_version_id"])
+        except KeyError:
+            job["identity_version"] = None
     for g in job["generations"]:
         g["media"] = media_url(g.get("output_url"))
     return templates.TemplateResponse(

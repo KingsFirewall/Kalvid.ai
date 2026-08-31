@@ -182,6 +182,7 @@ def reserve(
     duration_s: float,
     job_id: int | None = None,
     scope: Scope | None = None,
+    identity_version_id: int | None = None,
     variant: str | None = None,
     calls: int = 1,
     payload: str = "",
@@ -226,11 +227,11 @@ def reserve(
             raise BudgetExceeded(s.scope, s.spent, s.estimate, s.cap)
 
         sql = ("""INSERT INTO generations
-                  (job_id, persona_id, client_id, stage, provider, model,
-                   request_payload, status, estimated_cost_usd)
-                  VALUES (?,?,?,?,?,?,?, 'pending', ?)""")
-        args = (scope.job_id, scope.persona_id, scope.client_id, stage,
-                rate.provider, rate.model, payload, estimate)
+                  (job_id, persona_id, client_id, identity_version_id, stage,
+                   provider, model, request_payload, status, estimated_cost_usd)
+                  VALUES (?,?,?,?,?,?,?,?, 'pending', ?)""")
+        args = (scope.job_id, scope.persona_id, scope.client_id, identity_version_id,
+                stage, rate.provider, rate.model, payload, estimate)
         if db.BACKEND == "postgres":
             gen_id = conn.execute(db.translate(sql) + " RETURNING id", args).fetchone()["id"]
         else:

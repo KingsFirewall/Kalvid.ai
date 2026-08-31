@@ -33,6 +33,16 @@ class Rate:
     # Some video models only emit fixed lengths; a 3s request is billed at the tier.
     # Empty for models that bill by the second.
     fixed_durations: tuple[int, ...] = ()
+    # How this model spells `duration`. fal is not consistent about it and validates
+    # strictly, so guessing means a 400 instead of a render:
+    #   int             -> 8      (minimax)
+    #   string          -> "8"    (wan, kling, seedance)
+    #   seconds_suffix  -> "8s"   (veo)
+    duration_format: str = "int"
+    # Some editing models take a LIST of conditioning images (nano-banana's
+    # image_urls) rather than a single image_url. That is also how a reference pack
+    # gets used as a pack rather than one plate at a time.
+    reference_field: str = "image_url"
     # The model's accepted input field names. Empty = adapter uses its own defaults.
     supports: tuple[str, ...] = ()
     # Per-stage input values; the 'all' key applies to every stage.
@@ -43,6 +53,10 @@ class Rate:
     # Promotional pricing with a known end date. Past it the rate reads as unverified.
     price_expires: date | None = None
     price_note: str = ""
+    # Token-billed models (Claude). `usd` stays the flat RESERVATION estimate; these
+    # give settle() the exact cost once real usage is known.
+    usd_per_mtok_in: float = 0.0
+    usd_per_mtok_out: float = 0.0
 
     def stage_params(self, stage: str) -> dict:
         return {**self.params.get("all", {}), **self.params.get(stage, {})}
@@ -94,6 +108,16 @@ class Rate:
             return round(price * self.billed_duration(duration_s) * calls, 6)
         return round(price * calls, 6)
 
+    @property
+    def token_billed(self) -> bool:
+        return bool(self.usd_per_mtok_in or self.usd_per_mtok_out)
+
+    def token_cost(self, input_tokens: int, output_tokens: int) -> float:
+        """Exact cost from measured usage. Cached reads are billed at ~0.1x, but the
+        API reports them separately and we do not yet cache, so this is the full rate."""
+        return round(input_tokens / 1e6 * self.usd_per_mtok_in
+                     + output_tokens / 1e6 * self.usd_per_mtok_out, 6)
+
     def variant_for(self, stage: str) -> str | None:
         """The priced parameter's value for a stage — e.g. resolution '480P'."""
         return self.stage_params(stage).get(self.price_by) if self.price_by else None
@@ -122,6 +146,8 @@ class RateTable:
                 source=r.get("source", ""),
                 identity_via_image=bool(r.get("identity_via_image", False)),
                 fixed_durations=tuple(r.get("fixed_durations", ()) or ()),
+                duration_format=r.get("duration_format", "int"),
+                reference_field=r.get("reference_field", "image_url"),
                 supports=tuple(r.get("supports", ()) or ()),
                 params=r.get("params", {}) or {},
                 usd_by=r.get("usd_by", {}) or {},
@@ -129,6 +155,8 @@ class RateTable:
                 price_expires=(datetime.strptime(r["price_expires"], "%Y-%m-%d").date()
                                if r.get("price_expires") else None),
                 price_note=r.get("price_note", ""),
+                usd_per_mtok_in=float(r.get("usd_per_mtok_in") or 0.0),
+                usd_per_mtok_out=float(r.get("usd_per_mtok_out") or 0.0),
             )
         self._rates = rates
         self._routing = raw.get("routing", {})

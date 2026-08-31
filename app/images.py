@@ -23,8 +23,9 @@ from __future__ import annotations
 import json
 import logging
 import time
+import uuid
 
-from . import db, ledger, storage
+from . import db, identity as identity_mod, ledger, storage
 from .config import settings
 from .jobs import _pool, _shutdown
 from .providers.base import GenerationRequest, ProviderError
@@ -118,6 +119,7 @@ def generate(*, prompt: str, client_id: int | None = None, persona_id: int | Non
             prompt=prompt,
             duration_s=0.0,
             supports=route.rate.supports,
+            reference_field=route.rate.reference_field,
             extra=dict(route.rate.stage_params(stage)),
         )
         if keep_face:
@@ -197,23 +199,76 @@ def _run_still(gen_id: int, client_id: int, persona_id: int | None,
 
 # ---------------------------------------------------------------- asset library
 
-def save_upload(*, client_id: int, persona_id: int | None, url: str,
-                label: str = "") -> int:
+def save_upload(*, client_id: int | None, persona_id: int | None, url: str,
+                label: str = "", plate: str | None = None) -> int:
     """Record an externally-hosted image as an asset. No generation, no cost."""
     client_id, persona = _resolve_target(client_id, persona_id)
+    _check_plate(plate, persona)
     return db.insert(
-        """INSERT INTO assets (client_id, persona_id, kind, source, url, label)
-           VALUES (?,?, 'image', 'uploaded', ?,?)""",
-        (client_id, persona["id"] if persona else None, url, label),
+        """INSERT INTO assets (client_id, persona_id, kind, source, url, label, plate)
+           VALUES (?,?, 'image', 'uploaded', ?,?,?)""",
+        (client_id, persona["id"] if persona else None, url, label, plate),
     )
 
 
-def set_primary(asset_id: int) -> dict:
-    """Make this asset the persona's locked face.
+def _check_plate(plate: str | None, persona: dict | None) -> None:
+    if plate is None:
+        return
+    if plate not in identity_mod.PLATES:
+        raise ImageError(f"plate must be one of {', '.join(identity_mod.PLATES)}")
+    if plate in identity_mod.IDENTITY_PLATES and persona is None:
+        raise ImageError(
+            f"a {plate!r} plate is part of an influencer's identity, so it has to "
+            f"belong to one. Pick an influencer, or file it as a product asset.")
 
-    Writes personas.reference_image_url as well as the flag, because that column is
-    what every generation actually reads. A 'primary' asset the renderer never sees
-    would be a label that lies.
+
+def upload_file(*, data: bytes, content_type: str, filename: str = "",
+                client_id: int | None = None, persona_id: int | None = None,
+                plate: str | None = None, label: str = "") -> dict:
+    """Store an uploaded image and file it as an asset. Costs nothing.
+
+    Identity plates go into the persona's OPEN DRAFT, never into a locked version —
+    uploading a picture must not silently rewrite an identity that work has already
+    been rendered against. Wardrobe and product assets are the variable layer and are
+    not attached to a version at all.
+    """
+    from . import storage
+
+    client_id, persona = _resolve_target(client_id, persona_id)
+    _check_plate(plate, persona)
+
+    client_name = db.query_one("SELECT name FROM clients WHERE id=?", (client_id,))["name"]
+    key = f"upload-{uuid.uuid4().hex[:12]}"
+    try:
+        url = storage.store_upload(
+            data, content_type=content_type, client_name=client_name,
+            persona_id=persona["id"] if persona else None, asset_key=key)
+    except storage.StorageError as exc:
+        raise ImageError(str(exc))
+
+    version_id = None
+    if plate in identity_mod.IDENTITY_PLATES and persona is not None:
+        draft = identity_mod.open_draft(persona["id"])
+        version_id = draft["id"]
+
+    asset_id = db.insert(
+        """INSERT INTO assets (client_id, persona_id, identity_version_id, kind,
+                               source, url, label, plate)
+           VALUES (?,?,?, 'image', 'uploaded', ?,?,?)""",
+        (client_id, persona["id"] if persona else None, version_id, url,
+         label or filename, plate),
+    )
+    return dict(db.query_one("SELECT * FROM assets WHERE id=?", (asset_id,)))
+
+
+def set_primary(asset_id: int, locked_by: str = "operator") -> dict:
+    """Make this asset the persona's locked face — as a NEW identity version.
+
+    This used to overwrite personas.reference_image_url in place, which quietly
+    rewrote the provenance of every clip already delivered under the old face: there
+    was no way, afterwards, to tell which reference a given video had actually used.
+    Now it cuts v(n+1). Existing jobs stay pinned to the version they were briefed
+    against and will re-draft as the same person.
     """
     asset = db.query_one("SELECT * FROM assets WHERE id=?", (asset_id,))
     if asset is None:
@@ -221,11 +276,23 @@ def set_primary(asset_id: int) -> dict:
     if asset["persona_id"] is None:
         raise ImageError("this asset is not attached to a persona, so it cannot be "
                          "that persona's locked face")
+
+    current = identity_mod.current_version(asset["persona_id"])
+    if current and current["reference_image_url"] == asset["url"]:
+        raise ImageError("this is already the locked face for the current version")
+
+    version = identity_mod.edit(asset["persona_id"], locked_by,
+                                reference_image_url=asset["url"])
+
+    # is_primary marks the plate belonging to the CURRENT version, so the Studio can
+    # show which one is live without joining every time.
     db.execute("UPDATE assets SET is_primary=0 WHERE persona_id=?", (asset["persona_id"],))
-    db.execute("UPDATE assets SET is_primary=1 WHERE id=?", (asset_id,))
-    db.execute("UPDATE personas SET reference_image_url=? WHERE id=?",
-               (asset["url"], asset["persona_id"]))
-    return dict(db.query_one("SELECT * FROM personas WHERE id=?", (asset["persona_id"],)))
+    db.execute("UPDATE assets SET is_primary=1, identity_version_id=?, plate='identity' "
+               "WHERE id=?", (version["id"], asset_id))
+
+    persona = dict(db.query_one("SELECT * FROM personas WHERE id=?", (asset["persona_id"],)))
+    persona["identity_version"] = version["version"]
+    return persona
 
 
 def delete_asset(asset_id: int) -> None:
@@ -240,15 +307,37 @@ def delete_asset(asset_id: int) -> None:
     if asset["is_primary"]:
         raise ImageError("this is the persona's locked face. Set a different asset as "
                          "primary first, or every future render loses its reference.")
+    # Only the LOCKED layer is protected. Wardrobe and product plates are the variable
+    # layer by design — a pair of glasses is swapped per scene, and refusing to delete
+    # one would be treating a prop as part of the persona's identity.
+    if asset["plate"] in identity_mod.IDENTITY_PLATES:
+        backing = db.query_one(
+            """SELECT version FROM identity_versions
+                WHERE id=? AND status IN ('locked','superseded')""",
+            (asset["identity_version_id"],))
+        if backing:
+            raise ImageError(
+                f"this is the {asset['plate']} plate of locked identity version "
+                f"v{backing['version']}, so deleting it would break the provenance of "
+                f"work already rendered against it.")
     db.execute("DELETE FROM assets WHERE id=?", (asset_id,))
 
 
-def list_assets(*, persona_id: int | None = None, client_id: int | None = None) -> list[dict]:
+def list_assets(*, persona_id: int | None = None, client_id: int | None = None,
+                plates: tuple[str, ...] | None = None,
+                exclude_plates: tuple[str, ...] | None = None) -> list[dict]:
     where, params = [], []
     if persona_id is not None:
         where.append("a.persona_id = ?"); params.append(persona_id)
     if client_id is not None:
         where.append("a.client_id = ?"); params.append(client_id)
+    if plates:
+        where.append("a.plate IN (%s)" % ",".join("?" * len(plates)))
+        params.extend(plates)
+    if exclude_plates:
+        where.append("(a.plate IS NULL OR a.plate NOT IN (%s))"
+                     % ",".join("?" * len(exclude_plates)))
+        params.extend(exclude_plates)
     sql = """SELECT a.*, p.name AS persona_name, c.name AS client_name
                FROM assets a
                JOIN clients c ON c.id = a.client_id

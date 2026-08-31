@@ -20,6 +20,14 @@ class Settings:
     rates_path: Path = field(default_factory=lambda: Path(os.getenv("KALVID_RATES", str(ROOT / "rates.json"))))
 
     fal_api_key: str | None = field(default_factory=lambda: os.getenv("FAL_KEY"))
+    # Claude writes the dialogue. It never writes the camera directions — those stay
+    # deterministic so the same brief always yields the same visual prompt.
+    anthropic_api_key: str | None = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY"))
+    script_model: str = field(
+        default_factory=lambda: os.getenv("KALVID_SCRIPT_MODEL", "claude-opus-5"))
+    # Short-form creative copy does not repay deep reasoning; medium is the sweet spot.
+    script_effort: str = field(
+        default_factory=lambda: os.getenv("KALVID_SCRIPT_EFFORT", "medium"))
     runware_api_key: str | None = field(default_factory=lambda: os.getenv("RUNWARE_API_KEY"))
 
     # --- Supabase -----------------------------------------------------------
@@ -83,7 +91,8 @@ class Settings:
         )
 
     def provider_configured(self, name: str) -> bool:
-        key = {"fal": self.fal_api_key, "runware": self.runware_api_key}.get(name)
+        key = {"fal": self.fal_api_key, "runware": self.runware_api_key,
+               "anthropic": self.anthropic_api_key}.get(name)
         return bool(key) and not key.startswith("YOUR_")
 
 

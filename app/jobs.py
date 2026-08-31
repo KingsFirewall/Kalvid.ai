@@ -31,7 +31,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 from . import db, ledger, storage
 from .config import settings
-from .identity import binding_from_row
+from . import identity as identity_mod
+from .identity import binding_from_version
 from .prompts import structure
 from .providers.base import GenerationRequest, ProviderError
 from .rates import UnverifiedRate
@@ -82,6 +83,14 @@ def create_job(*, persona_id: int, brief: str, platform: str = "tiktok",
     if persona is None:
         raise KeyError(f"persona {persona_id} not found")
 
+    # Pin the identity now. If the persona is later edited to v2, this job keeps
+    # rendering — and re-drafting — as the person it was briefed for.
+    version = identity_mod.current_version(persona_id)
+    if version is None:
+        version = identity_mod.lock(persona_id, "auto") \
+            if identity_mod.draft_version(persona_id) \
+            else identity_mod.edit(persona_id, "auto")
+
     sp = structure(
         brief,
         persona_name=persona["name"],
@@ -90,10 +99,10 @@ def create_job(*, persona_id: int, brief: str, platform: str = "tiktok",
         duration_s=target_duration,
     )
     return db.insert(
-        """INSERT INTO jobs (persona_id, brief, structured_prompt, platform,
-                             target_duration, job_budget_cap, status)
-           VALUES (?,?,?,?,?,?, 'created')""",
-        (persona_id, brief, json.dumps(sp.to_dict()), platform,
+        """INSERT INTO jobs (persona_id, identity_version_id, brief, structured_prompt,
+                             platform, target_duration, job_budget_cap, status)
+           VALUES (?,?,?,?,?,?,?, 'created')""",
+        (persona_id, version["id"], brief, json.dumps(sp.to_dict()), platform,
          target_duration, job_budget_cap),
     )
 
@@ -110,10 +119,22 @@ def _transition(job_id: int, to: str, allowed_from: tuple[str, ...]) -> bool:
 
 
 def _job_bundle(job_id: int):
+    """The job plus the identity it was PINNED to.
+
+    Deliberately reads identity_strategy / reference_image_url / identity_lock_id from
+    identity_versions and not from personas: a job briefed against v1 must render as
+    v1 forever, including on a re-draft made after the persona moved to v2. Falling
+    back to the persona row covers a job created before versioning existed.
+    """
     row = db.query_one(
         """SELECT j.*, p.name AS persona_name, p.notes AS persona_notes,
-                  p.identity_strategy, p.reference_image_url, p.identity_lock_id
-             FROM jobs j JOIN personas p ON p.id = j.persona_id
+                  COALESCE(iv.identity_strategy,   p.identity_strategy)   AS identity_strategy,
+                  COALESCE(iv.reference_image_url, p.reference_image_url) AS reference_image_url,
+                  COALESCE(iv.identity_lock_id,    p.identity_lock_id)    AS identity_lock_id,
+                  iv.version AS identity_version
+             FROM jobs j
+             JOIN personas p ON p.id = j.persona_id
+             LEFT JOIN identity_versions iv ON iv.id = j.identity_version_id
             WHERE j.id = ?""",
         (job_id,),
     )
@@ -148,10 +169,12 @@ def _build_request(job, *, stage: str, rate=None) -> GenerationRequest:
         width=DRAFT_WIDTH if stage == "draft" else sp.get("width", 720),
         height=DRAFT_HEIGHT if stage == "draft" else sp.get("height", 1280),
         supports=rate.supports if rate is not None else (),
+        duration_format=rate.duration_format if rate is not None else "int",
+        reference_field=rate.reference_field if rate is not None else "image_url",
         extra={k: v for k, v in params.items() if k != "resolution"},
     )
 
-    binding = binding_from_row(job)
+    binding = binding_from_version(job)
     problems = binding.blocking_problems
     if problems:
         raise IdentityError(
@@ -183,7 +206,8 @@ def _start_generation(job_id: int, stage: str, override_by: str | None) -> int:
     req.model = route.charged.model if not route.billable else route.rate.model
 
     gen_id = ledger.reserve(
-        job_id=job_id, stage=stage, rate=route.charged, duration_s=duration,
+        job_id=job_id, identity_version_id=job["identity_version_id"],
+        stage=stage, rate=route.charged, duration_s=duration,
         variant=route.charged.variant_for(stage),
         payload=json.dumps({"model": req.model, "kind": req.kind,
                             "duration_s": duration, "resolution": req.resolution,

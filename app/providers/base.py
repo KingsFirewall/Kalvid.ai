@@ -24,7 +24,20 @@ class GenerationRequest:
     # The model's accepted input names, from rates.json. When set, an adapter must
     # send nothing outside this list — an unsupported field is an error, not a no-op.
     supports: tuple[str, ...] = ()
+    # See Rate.duration_format / Rate.reference_field — fal spells these differently
+    # per model and validates strictly.
+    duration_format: str = "int"
+    reference_field: str = "image_url"
     extra: dict = field(default_factory=dict)
+
+    def duration_value(self):
+        """`duration` in whatever shape this model's schema demands."""
+        n = int(round(self.duration_s))
+        if self.duration_format == "string":
+            return str(n)
+        if self.duration_format == "seconds_suffix":
+            return f"{n}s"
+        return n
 
     def accepts(self, field_name: str) -> bool:
         return not self.supports or field_name in self.supports
