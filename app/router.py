@@ -12,7 +12,7 @@ import logging
 from dataclasses import dataclass
 
 from .config import settings
-from .providers.base import Provider, ProviderError
+from .providers.base import Provider
 from .providers.fal import FalProvider
 from .providers.mock import MockProvider
 from .providers.runware import RunwareProvider

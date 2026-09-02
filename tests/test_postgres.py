@@ -96,8 +96,10 @@ def test_concurrent_reservations_cannot_both_slip_under_the_cap(seeded):
             db.close_conn()
 
     threads = [threading.Thread(target=attempt) for _ in range(2)]
-    for t in threads: t.start()
-    for t in threads: t.join(timeout=30)
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
     assert sorted(k for k, _ in results) == ["blocked", "ok"], results
 
 
@@ -113,7 +115,8 @@ def test_migration_preserves_ids(pg, tmp_path):
     conn.execute("INSERT INTO clients (id, name, monthly_budget_cap) VALUES (77, 'Legacy', 25)")
     conn.execute("""INSERT INTO personas (id, client_id, name, reference_image_url)
                     VALUES (88, 77, 'Old', 'https://x.test/a.png')""")
-    conn.commit(); conn.close()
+    conn.commit()
+    conn.close()
 
     data = migrate.read_sqlite(src)
     migrate.copy_into_postgres(data, wipe=True)

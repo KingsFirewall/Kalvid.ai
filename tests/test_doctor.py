@@ -23,6 +23,7 @@ def test_one_unverified_price_falls_over_to_the_next_candidate():
     (a promo lapsing, say) should demote that model, not stop production.
     """
     import dataclasses
+
     from app.rates import rate_table
 
     keys = [c.key for c in rate_table.candidates("final")]
@@ -40,6 +41,7 @@ def test_one_unverified_price_falls_over_to_the_next_candidate():
 def test_unverified_prices_are_reported_as_blocking():
     """With NO verified candidate for a stage, that stage must block."""
     import dataclasses
+
     from app.rates import rate_table
 
     keys = [c.key for c in rate_table.candidates("final")]
@@ -65,6 +67,7 @@ def test_an_expiring_promo_price_is_surfaced():
 
 def test_a_verified_rate_clears_the_price_check(monkeypatch):
     from datetime import date
+
     from app.rates import rate_table
 
     key = rate_table.candidates("final")[0].key

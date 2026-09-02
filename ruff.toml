@@ -1,0 +1,28 @@
+# Lint config. The selection is deliberately narrow: rules that catch real defects,
+# not rules that argue with the framework or with choices this codebase makes on
+# purpose.
+target-version = "py312"
+line-length = 100
+
+[lint]
+select = [
+    "F",    # pyflakes — unused imports/names, f-string mistakes. Real bugs.
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "I",    # import sorting
+    "UP",   # pyupgrade
+    "C4",   # comprehension clarity
+]
+ignore = [
+    "E501",  # line length is handled by line-length above; long URLs in comments are fine
+]
+
+[lint.per-file-ignores]
+# Tests import fixtures by name and shadow them as arguments; that is pytest's design.
+"tests/*" = ["F811"]
+# conftest sets KALVID_* env vars before importing app.config, which reads them at
+# import time. The imports cannot move to the top without breaking every test.
+"tests/conftest.py" = ["E402"]
+
+[format]
+quote-style = "preserve"

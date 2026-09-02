@@ -45,6 +45,7 @@ def cmd_setup_storage(a):
     """Create the Supabase bucket and prove a full upload -> signed URL round trip."""
     import tempfile
     from pathlib import Path as _Path
+
     from app import storage
 
     if not storage.available():
@@ -91,6 +92,7 @@ def cmd_db_status(a):
 def cmd_db_schema(a):
     """Print the DDL for the chosen backend, ready to paste into the SQL editor."""
     from pathlib import Path as _Path
+
     from app import db
     name = "schema_pg.sql" if (a.postgres or db.BACKEND == "postgres") else "schema.sql"
     print((_Path(__file__).parent / "app" / name).read_text())
@@ -106,6 +108,7 @@ def cmd_db_init(a):
 def cmd_db_migrate(a):
     """Copy the SQLite ledger into Postgres, preserving ids."""
     from pathlib import Path as _Path
+
     from app import db, migrate
 
     if db.BACKEND != "postgres":
@@ -118,7 +121,8 @@ def cmd_db_migrate(a):
         _p(f"  {t:<15} {len(rows)} rows")
     if not a.yes:
         if input("\nCopy these into Supabase Postgres? [y/N] ").strip().lower() not in ("y", "yes"):
-            _p("cancelled"); return
+            _p("cancelled")
+            return
     counts = migrate.copy_into_postgres(data, wipe=a.wipe)
     problems = migrate.verify(data)
     _p("\ncopied: " + ", ".join(f"{t}={n}" for t, n in counts.items()))
@@ -133,7 +137,7 @@ def cmd_db_migrate(a):
 def cmd_status(a):
     st = system_status()
     _p(f"mode         : {'DRY RUN (mock, $0)' if st['dry_run'] else 'LIVE — BILLABLE'}")
-    _p(f"providers    : " + ", ".join(f"{k}={'ok' if v else 'not configured'}"
+    _p("providers    : " + ", ".join(f"{k}={'ok' if v else 'not configured'}"
                                       for k, v in st["providers"].items()))
     _p(f"supabase     : {'configured' if st['supabase_storage'] else 'not configured'}")
     _p(f"in flight    : {st['in_flight']}")
@@ -310,39 +314,58 @@ def main():
     dm.add_argument("-y", "--yes", action="store_true")
     dm.set_defaults(fn=cmd_db_migrate)
 
-    lg = sub.add_parser("ledger"); lg.add_argument("client_id", type=int)
+    lg = sub.add_parser("ledger")
+    lg.add_argument("client_id", type=int)
     lg.set_defaults(fn=cmd_ledger)
 
     cl = sub.add_parser("client").add_subparsers(dest="sub", required=True)
-    ca = cl.add_parser("add"); ca.add_argument("name")
+    ca = cl.add_parser("add")
+    ca.add_argument("name")
     ca.add_argument("--cap", type=float, required=True)
     ca.add_argument("--job-cap", type=float, default=0.0)
-    ca.add_argument("--contact"); ca.set_defaults(fn=cmd_client_add)
+    ca.add_argument("--contact")
+    ca.set_defaults(fn=cmd_client_add)
     cl.add_parser("list").set_defaults(fn=cmd_client_list)
 
     pe = sub.add_parser("persona").add_subparsers(dest="sub", required=True)
-    pa = pe.add_parser("add"); pa.add_argument("client_id", type=int); pa.add_argument("name")
+    pa = pe.add_parser("add")
+    pa.add_argument("client_id", type=int)
+    pa.add_argument("name")
     pa.add_argument("--strategy", default="reference_image")
-    pa.add_argument("--ref"); pa.add_argument("--lock-id"); pa.add_argument("--notes")
+    pa.add_argument("--ref")
+    pa.add_argument("--lock-id")
+    pa.add_argument("--notes")
     pa.set_defaults(fn=cmd_persona_add)
     pe.add_parser("list").set_defaults(fn=cmd_persona_list)
 
     jb = sub.add_parser("job").add_subparsers(dest="sub", required=True)
-    ja = jb.add_parser("add"); ja.add_argument("persona_id", type=int); ja.add_argument("brief")
-    ja.add_argument("--platform", default="tiktok"); ja.add_argument("--duration", type=int, default=8)
-    ja.add_argument("--cap", type=float, default=0.0); ja.set_defaults(fn=cmd_job_add)
+    ja = jb.add_parser("add")
+    ja.add_argument("persona_id", type=int)
+    ja.add_argument("brief")
+    ja.add_argument("--platform", default="tiktok")
+    ja.add_argument("--duration", type=int, default=8)
+    ja.add_argument("--cap", type=float, default=0.0)
+    ja.set_defaults(fn=cmd_job_add)
     jb.add_parser("list").set_defaults(fn=cmd_job_list)
     for name, fn in (("preview", cmd_job_preview), ("show", cmd_job_show)):
-        s = jb.add_parser(name); s.add_argument("job_id", type=int); s.set_defaults(fn=fn)
-    jd = jb.add_parser("draft"); jd.add_argument("job_id", type=int)
-    jd.add_argument("--override"); jd.add_argument("--wait", action="store_true")
+        s = jb.add_parser(name)
+        s.add_argument("job_id", type=int)
+        s.set_defaults(fn=fn)
+    jd = jb.add_parser("draft")
+    jd.add_argument("job_id", type=int)
+    jd.add_argument("--override")
+    jd.add_argument("--wait", action="store_true")
     jd.set_defaults(fn=cmd_job_draft)
-    jap = jb.add_parser("approve"); jap.add_argument("job_id", type=int)
-    jap.add_argument("--override"); jap.add_argument("--wait", action="store_true")
+    jap = jb.add_parser("approve")
+    jap.add_argument("job_id", type=int)
+    jap.add_argument("--override")
+    jap.add_argument("--wait", action="store_true")
     jap.add_argument("-y", "--yes", action="store_true", help="skip the confirmation")
     jap.set_defaults(fn=cmd_job_approve)
-    jr = jb.add_parser("reject"); jr.add_argument("job_id", type=int)
-    jr.add_argument("--reason"); jr.set_defaults(fn=cmd_job_reject)
+    jr = jb.add_parser("reject")
+    jr.add_argument("job_id", type=int)
+    jr.add_argument("--reason")
+    jr.set_defaults(fn=cmd_job_reject)
 
     args = ap.parse_args()
     try:

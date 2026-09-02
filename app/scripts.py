@@ -23,9 +23,10 @@ from __future__ import annotations
 import json
 import logging
 
-from . import db, identity as identity_mod, ledger
+from . import db, ledger
+from . import identity as identity_mod
 from .config import settings
-from .rates import UnverifiedRate, rate_table
+from .rates import rate_table
 
 log = logging.getLogger(__name__)
 

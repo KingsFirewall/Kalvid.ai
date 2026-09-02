@@ -32,11 +32,32 @@ def test_every_routing_stage_has_at_least_one_usable_model():
         assert usable, f"stage {stage!r} has no verified model — live calls would fail"
 
 
-def test_every_fal_rate_declares_its_schema_and_a_verified_price():
+def test_every_fal_rate_declares_its_schema_and_a_checked_price():
+    """Every rate must have been priced by a human against a citable source.
+
+    Note what this does NOT assert: that the price is still valid today. A promo that
+    lapses is an expected state the router handles by demoting that model — asserting
+    `r.verified` here made the suite fail at midnight for a system working correctly.
+    What must never happen is a rate nobody ever checked.
+    """
     for r in fal_rates():
         assert r.supports, f"{r.key} declares no supports; the adapter would guess"
-        assert r.verified, f"{r.key} has no verified price"
+        assert r.last_verified is not None, (
+            f"{r.key} has never been priced — a cap computed from it would be fiction")
         assert r.source, f"{r.key} has no source — an unciteable price is a rumour"
+
+
+def test_a_lapsed_rate_is_demoted_not_fatal():
+    """The catalogue exists so one expired price cannot stop production."""
+    for stage in STAGES:
+        candidates = rate_table.candidates(stage)
+        usable = [r for r in candidates if r.verified]
+        assert usable, f"stage {stage!r} has no currently-valid price"
+        lapsed = [r.key for r in candidates if not r.verified and r.last_verified]
+        if lapsed:
+            # Informational, and the point of the test: production continues.
+            print(f"  {stage}: {len(lapsed)} lapsed ({', '.join(lapsed)}), "
+                  f"falling through to {usable[0].key}")
 
 
 def test_the_adapter_never_sends_a_field_the_model_does_not_accept():
@@ -101,3 +122,66 @@ def test_every_video_model_can_carry_a_persona_identity():
             assert r.identity_via_image, (
                 f"{r.key} is routed to {stage} but does not take a reference image")
             assert "image_url" in r.supports or r.reference_field == "image_urls"
+
+
+def test_queue_status_uses_the_app_id_not_the_full_endpoint_path():
+    """fal submits to the full path but polls under the owning app.
+
+    Getting this wrong is expensive in a specific way: the submit succeeds, the job
+    runs and is billed, and only the poll 405s — so you pay for a render and then
+    throw it away.
+    """
+    from app.providers.fal import queue_app
+    cases = {
+        "fal-ai/flux/schnell": "fal-ai/flux",
+        "fal-ai/flux/dev/image-to-image": "fal-ai/flux",
+        "minimax/h3-max/image-to-video": "minimax/h3-max",
+        "fal-ai/bytedance/seedance/v1/pro/image-to-video": "fal-ai/bytedance",
+        "fal-ai/kling-video/v2.5-turbo/pro/image-to-video": "fal-ai/kling-video",
+        "fal-ai/nano-banana/edit": "fal-ai/nano-banana",
+        "fal-ai/qwen-image": "fal-ai/qwen-image",
+    }
+    for model, expected in cases.items():
+        assert queue_app(model) == expected, f"{model} -> {queue_app(model)}"
+
+
+def test_every_configured_fal_model_resolves_to_a_two_segment_queue_app():
+    from app.providers.fal import queue_app
+    for r in fal_rates():
+        assert len(queue_app(r.model).split("/")) == 2, (
+            f"{r.key} would poll a path fal rejects with 405")
+
+
+def test_duration_is_clamped_to_what_the_model_accepts():
+    """A 3s draft on a 5s-minimum model is a 422, not a short clip.
+
+    fal reports it as a failed *result* — the job is accepted, then rejected — so it
+    reads like a render that failed rather than a request that was never valid.
+    """
+    rate = rate_table.get("fal:minimax/h3-max/image-to-video")
+    assert rate.min_duration == 5 and rate.max_duration == 15
+    assert rate.billed_duration(3.0) == 5.0, "below the minimum must snap up"
+    assert rate.billed_duration(20.0) == 15.0, "above the maximum must clamp down"
+    assert rate.billed_duration(8.0) == 8.0
+
+
+def test_the_draft_request_carries_the_clamped_duration():
+    """The clamp has to reach the payload, not just the estimate."""
+    from app import jobs
+    rate = rate_table.get("fal:minimax/h3-max/image-to-video")
+    job = {
+        "structured_prompt": '{"prompt": "x"}', "target_duration": 8,
+        "persona_name": "T", "identity_strategy": "reference_image",
+        "reference_image_url": "https://example.test/f.png", "identity_lock_id": None,
+    }
+    req = jobs._build_request(job, stage="draft", rate=rate)
+    assert req.duration_s >= rate.min_duration, (
+        f"submitted duration {req.duration_s} is below the model's minimum")
+
+
+def test_no_model_is_ever_asked_for_a_duration_it_rejects():
+    for r in fal_rates():
+        if r.kind != "video" or not r.min_duration:
+            continue
+        assert r.billed_duration(1.0) >= r.min_duration
+        assert r.estimate(duration_s=r.billed_duration(1.0)) > 0

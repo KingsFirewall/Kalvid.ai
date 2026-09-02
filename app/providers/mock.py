@@ -11,7 +11,6 @@ import json
 import struct
 import time
 import zlib
-from pathlib import Path
 
 from ..config import settings
 from .base import GenerationRequest, GenerationResult, Provider
@@ -78,20 +77,24 @@ def _chunk(tag: bytes, data: bytes) -> bytes:
 
 
 def _placeholder_png(seed: str, width: int = 360, height: int = 640) -> bytes:
-    """A 9:16 gradient PNG, written with stdlib only — no image library to install.
+    """A 9:16 placeholder PNG, written with stdlib only — no image library to install.
 
-    Dry run exists so the whole loop can be walked for $0. That only works if the
-    artifacts are real enough to render: a placeholder the browser refuses to draw
-    makes the asset library look broken rather than empty.
+    Deliberately loud. The first version was a soft gradient, which on a dark UI was
+    indistinguishable from an empty panel — so a dry run looked like a broken app
+    rather than a working one with nothing real in it. Diagonal hazard stripes cannot
+    be mistaken for a render.
     """
     h = int(hashlib.sha256(seed.encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
+    r1, g1, b1 = colorsys.hsv_to_rgb(h, 0.65, 0.95)          # bright
+    r2, g2, b2 = colorsys.hsv_to_rgb((h + 0.5) % 1.0, 0.75, 0.35)   # dark, opposite
+    a = bytes((int(r1 * 255), int(g1 * 255), int(b1 * 255)))
+    b = bytes((int(r2 * 255), int(g2 * 255), int(b2 * 255)))
+
     rows = bytearray()
     for y in range(height):
-        t = y / (height - 1)
-        r, g, b = colorsys.hsv_to_rgb((h + 0.12 * t) % 1.0, 0.55 - 0.25 * t,
-                                      0.22 + 0.5 * t)
-        rows.append(0)                                   # filter byte: none
-        rows.extend(bytes((int(r * 255), int(g * 255), int(b * 255))) * width)
+        rows.append(0)                                        # filter byte: none
+        for x in range(width):
+            rows += a if ((x + y) // 36) % 2 == 0 else b
     return (b"\x89PNG\r\n\x1a\n"
             + _chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
             + _chunk(b"IDAT", zlib.compress(bytes(rows), 6))

@@ -2,7 +2,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app import db, jobs
+from app import jobs
 from app.main import app
 
 

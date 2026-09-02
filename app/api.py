@@ -11,12 +11,12 @@ from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from . import db, images, jobs, ledger, scripts
-from .config import settings
 from . import identity as identity_mod
+from .config import settings
 from .identity import STRATEGIES, IdentityBinding
-from .prompts import structure
 from .rates import UnverifiedRate, rate_table
-from .router import NoProviderAvailable, router as provider_router
+from .router import NoProviderAvailable
+from .router import router as provider_router
 
 api = APIRouter(prefix="/api")
 

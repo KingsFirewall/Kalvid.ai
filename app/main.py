@@ -1,6 +1,7 @@
 """FastAPI app + the internal dashboard."""
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -12,9 +13,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import db, images, jobs, ledger, scripts
+from . import identity as identity_mod
 from .api import api, system_status
 from .config import settings
-from . import identity as identity_mod
 from .identity import IdentityBinding
 from .rates import rate_table
 
@@ -107,8 +108,24 @@ def _client_rows() -> list[dict]:
     return out
 
 
+def _asset_version() -> str:
+    """Short hash of the static bundle, appended to its URL.
+
+    A browser will re-use a cached app.js for the life of a tab unless the URL
+    changes. During development that means a shipped fix can be invisible — the
+    server is correct, the page is stale, and nothing says so.
+    """
+    h = hashlib.sha256()
+    for name in ("app.css", "app.js"):
+        f = WEB / "static" / name
+        if f.exists():
+            h.update(f.read_bytes())
+    return h.hexdigest()[:10]
+
+
 def _ctx(request: Request, **kw) -> dict:
-    return {"request": request, "status": system_status(), "settings": settings, **kw}
+    return {"request": request, "status": system_status(), "settings": settings,
+            "asset_v": _asset_version(), **kw}
 
 
 # ---------------------------------------------------------------- pages

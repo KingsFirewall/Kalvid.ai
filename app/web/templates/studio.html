@@ -10,8 +10,10 @@
   const labelEl = document.getElementById('asset-label');
   const noteEl = document.getElementById('plate-note');
   const progress = document.getElementById('upload-progress');
-  const personaId = {{ selected.id }};
-  const IDENTITY_PLATES = {{ selected.identity_plates|list|tojson }};
+  // Read from the element rather than templated into the source: keeps this block
+  // valid JavaScript, which means an editor and a linter can both parse it.
+  const personaId = Number(zone.dataset.personaId);
+  const IDENTITY_PLATES = (zone.dataset.identityPlates || '').split(',').filter(Boolean);
 
   plateEl.addEventListener('change', () => {
     noteEl.classList.toggle('hidden', !IDENTITY_PLATES.includes(plateEl.value));
@@ -351,7 +353,10 @@
         plate follows {{ selected.name }} into every scene afterwards.
       </p>
 
-      <div id="dropzone" class="rounded-xl border border-dashed border-white/15 px-5 py-8 text-center transition-colors cursor-pointer hover:border-primary/40 hover:bg-white/[0.03]">
+      <div id="dropzone"
+           data-persona-id="{{ selected.id }}"
+           data-identity-plates="{{ selected.identity_plates|list|join(',') }}"
+           class="rounded-xl border border-dashed border-white/15 px-5 py-8 text-center transition-colors cursor-pointer hover:border-primary/40 hover:bg-white/[0.03]">
         <span class="material-symbols-outlined text-[32px] text-on-surface-variant/50">cloud_upload</span>
         <p class="text-[13.5px] text-on-surface mt-2">Drag an image here, or click to browse</p>
         <p class="text-[11.5px] text-on-surface-variant mt-1">PNG, JPEG, WebP, GIF or AVIF · max 15&nbsp;MB</p>
@@ -545,8 +550,10 @@
   const labelEl = document.getElementById('asset-label');
   const noteEl = document.getElementById('plate-note');
   const progress = document.getElementById('upload-progress');
-  const personaId = {{ selected.id }};
-  const IDENTITY_PLATES = {{ selected.identity_plates|list|tojson }};
+  // Read from the element rather than templated into the source: keeps this block
+  // valid JavaScript, which means an editor and a linter can both parse it.
+  const personaId = Number(zone.dataset.personaId);
+  const IDENTITY_PLATES = (zone.dataset.identityPlates || '').split(',').filter(Boolean);
 
   plateEl.addEventListener('change', () => {
     noteEl.classList.toggle('hidden', !IDENTITY_PLATES.includes(plateEl.value));

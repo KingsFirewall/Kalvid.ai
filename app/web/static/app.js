@@ -135,3 +135,74 @@ function setRail(open) {
 }
 if (railToggle) railToggle.addEventListener('click', () => setRail(rail.classList.contains('-translate-x-full')));
 if (scrim) scrim.addEventListener('click', () => setRail(false));
+
+
+// Brand logo slot: the placeholder is only shown while there is no logo file. The
+// <img> removes itself on error (see base.html), so "an image survived" is the signal.
+document.querySelectorAll('.logo-fallback').forEach((el) => {
+  const img = el.parentElement && el.parentElement.querySelector('img');
+  const hide = () => el.remove();
+  if (img) {
+    if (img.complete && img.naturalWidth > 0) hide();
+    else img.addEventListener('load', hide);
+  }
+});
+
+
+// Dismissible operator warnings.
+//
+// Keyed on the message text rather than an index, so dismissing "2 rates unverified"
+// does not also silence a different warning that appears tomorrow. Persisted per
+// browser; localStorage can throw outright in private windows, so every access is
+// guarded and the failure mode is "warnings simply stay visible".
+(function () {
+  const KEY = 'kalvid.dismissedWarnings';
+  const box = document.getElementById('warnings');
+  if (!box) return;
+
+  const read = () => {
+    try { return new Set(JSON.parse(localStorage.getItem(KEY) || '[]')); }
+    catch (_) { return new Set(); }
+  };
+  const write = (set) => {
+    try { localStorage.setItem(KEY, JSON.stringify([...set])); } catch (_) { /* fine */ }
+  };
+
+  const dismissed = read();
+  const rows = [...box.querySelectorAll('.warning-row')];
+
+  // Forget keys for warnings that no longer exist, so the store cannot grow forever
+  // and a warning that returns after being fixed is shown again.
+  const live = new Set(rows.map((r) => r.dataset.warning));
+  const pruned = new Set([...dismissed].filter((k) => live.has(k)));
+  if (pruned.size !== dismissed.size) write(pruned);
+
+  function hide(row, remember) {
+    if (remember) {
+      const set = read();
+      set.add(row.dataset.warning);
+      write(set);
+    }
+    row.style.transition = 'opacity .15s ease';
+    row.style.opacity = '0';
+    setTimeout(() => {
+      row.remove();
+      if (!box.querySelector('.warning-row')) box.remove();
+    }, 150);
+  }
+
+  rows.forEach((row) => {
+    if (pruned.has(row.dataset.warning)) { row.remove(); return; }
+    row.querySelector('[data-dismiss-warning]')
+       .addEventListener('click', () => hide(row, true));
+  });
+
+  const all = document.getElementById('dismiss-all-warnings');
+  if (all) {
+    all.addEventListener('click', () => {
+      box.querySelectorAll('.warning-row').forEach((r) => hide(r, true));
+      all.remove();
+    });
+  }
+  if (!box.querySelector('.warning-row')) box.remove();
+})();

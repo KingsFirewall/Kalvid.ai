@@ -30,8 +30,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from . import db, ledger, storage
-from .config import settings
 from . import identity as identity_mod
+from .config import settings
 from .identity import binding_from_version
 from .prompts import structure
 from .providers.base import GenerationRequest, ProviderError
@@ -155,6 +155,11 @@ def _stage_shape(job, stage: str) -> tuple[str, float]:
 def _build_request(job, *, stage: str, rate=None) -> GenerationRequest:
     sp = json.loads(job["structured_prompt"] or "{}")
     kind, duration = _stage_shape(job, stage)
+    # Clamp to what the chosen model will actually accept. Without this a 3s draft is
+    # submitted to a 5s-minimum model and comes back as a 422 that reads like a failed
+    # render — after the reservation has already been taken.
+    if rate is not None and kind == "video":
+        duration = rate.billed_duration(duration)
     params = rate.stage_params(stage) if rate is not None else {}
 
     req = GenerationRequest(

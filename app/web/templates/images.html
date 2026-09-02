@@ -92,65 +92,6 @@
       </div>
     </section>
 
-    <!-- Results -->
-    <section class="glass-panel rounded-2xl p-5">
-      <div class="flex items-center justify-between gap-3 mb-4">
-        <div class="flex items-center gap-2">
-          <span class="material-symbols-outlined text-[19px] text-tertiary">photo_library</span>
-          <h3 class="font-headline-md text-[17px] text-on-surface">Recent images</h3>
-        </div>
-        {% if pending %}
-          <span class="chip chip-warn" data-poll="5">
-            <span class="w-1.5 h-1.5 rounded-full bg-current progress-pulse"></span>
-            {{ pending }} generating
-          </span>
-        {% endif %}
-      </div>
-
-      {% if not assets %}
-        <div class="rounded-xl border border-dashed border-white/15 px-5 py-10 text-center">
-          <span class="material-symbols-outlined text-[32px] text-on-surface-variant/40">image</span>
-          <p class="text-[13.5px] text-on-surface mt-2.5">No images yet</p>
-          <p class="text-[12px] text-on-surface-variant mt-1">Generated stills appear here and stay reusable.</p>
-        </div>
-      {% else %}
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {% for a in assets %}
-          <div class="relative rounded-xl overflow-hidden border {{ 'border-primary/60' if a.is_primary else 'border-white/10' }} group bg-surface-container-lowest">
-            <img src="{{ a.url }}" alt="{{ (a.prompt or '')[:80] }}" loading="lazy"
-                 class="w-full aspect-[9/16] object-cover">
-            {% if a.is_primary %}
-              <span class="chip chip-primary absolute top-2 left-2 backdrop-blur-md">
-                <span class="material-symbols-outlined text-[13px]">lock</span> locked face
-              </span>
-            {% endif %}
-            <div class="absolute inset-x-0 bottom-0 p-2 flex items-center gap-1.5 bg-gradient-to-t from-black/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-              {% if a.persona_id and not a.is_primary %}
-                <button type="button" data-action="/api/assets/{{ a.id }}/primary"
-                        data-confirm="Make this {{ a.persona_name }}'s locked face?&#10;&#10;Every future video for this persona will be seeded from it."
-                        title="Use as locked face"
-                        class="w-7 h-7 rounded-full grid place-items-center bg-white/12 backdrop-blur-md border border-white/25 text-white hover:bg-primary hover:text-on-primary">
-                  <span class="material-symbols-outlined text-[15px]">lock</span>
-                </button>
-              {% endif %}
-              <a href="{{ a.url }}" target="_blank" title="Open full size"
-                 class="w-7 h-7 rounded-full grid place-items-center bg-white/12 backdrop-blur-md border border-white/25 text-white hover:bg-white/30">
-                <span class="material-symbols-outlined text-[15px]">open_in_new</span>
-              </a>
-              {% if not a.is_primary %}
-                <button type="button" data-action="/api/assets/{{ a.id }}" data-method="DELETE"
-                        data-confirm="Delete this image from the library?&#10;&#10;The ledger entry stays — the money was spent either way."
-                        title="Delete"
-                        class="ml-auto w-7 h-7 rounded-full grid place-items-center bg-white/12 backdrop-blur-md border border-white/25 text-white hover:bg-danger hover:text-white">
-                  <span class="material-symbols-outlined text-[15px]">delete</span>
-                </button>
-              {% endif %}
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    </section>
   </div>
 
   <!-- Cost + controls -->
@@ -223,6 +164,68 @@
     </p>
   </aside>
 </form>
+
+<!-- Results live BELOW the compose step. They used to sit inside the left
+     column, which put the Generate button underneath every image ever made. -->
+    <!-- Results -->
+  <section class="glass-panel rounded-2xl p-5">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[19px] text-tertiary">photo_library</span>
+          <h3 class="font-headline-md text-[17px] text-on-surface">Recent images</h3>
+        </div>
+        {% if pending %}
+          <span class="chip chip-warn" data-poll="5">
+            <span class="w-1.5 h-1.5 rounded-full bg-current progress-pulse"></span>
+            {{ pending }} generating
+          </span>
+        {% endif %}
+      </div>
+
+      {% if not assets %}
+        <div class="rounded-xl border border-dashed border-white/15 px-5 py-10 text-center">
+          <span class="material-symbols-outlined text-[32px] text-on-surface-variant/40">image</span>
+          <p class="text-[13.5px] text-on-surface mt-2.5">No images yet</p>
+          <p class="text-[12px] text-on-surface-variant mt-1">Generated stills appear here and stay reusable.</p>
+        </div>
+      {% else %}
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {% for a in assets %}
+          <div class="relative rounded-xl overflow-hidden border {{ 'border-primary/60' if a.is_primary else 'border-white/10' }} group bg-surface-container-lowest">
+            <img src="{{ a.url }}" alt="{{ (a.prompt or '')[:80] }}" loading="lazy"
+                 class="w-full aspect-[9/16] object-cover">
+            {% if a.is_primary %}
+              <span class="chip chip-primary absolute top-2 left-2 backdrop-blur-md">
+                <span class="material-symbols-outlined text-[13px]">lock</span> locked face
+              </span>
+            {% endif %}
+            <div class="absolute inset-x-0 bottom-0 p-2 flex items-center gap-1.5 bg-gradient-to-t from-black/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+              {% if a.persona_id and not a.is_primary %}
+                <button type="button" data-action="/api/assets/{{ a.id }}/primary"
+                        data-confirm="Make this {{ a.persona_name }}'s locked face?&#10;&#10;Every future video for this persona will be seeded from it."
+                        title="Use as locked face"
+                        class="w-7 h-7 rounded-full grid place-items-center bg-white/12 backdrop-blur-md border border-white/25 text-white hover:bg-primary hover:text-on-primary">
+                  <span class="material-symbols-outlined text-[15px]">lock</span>
+                </button>
+              {% endif %}
+              <a href="{{ a.url }}" target="_blank" title="Open full size"
+                 class="w-7 h-7 rounded-full grid place-items-center bg-white/12 backdrop-blur-md border border-white/25 text-white hover:bg-white/30">
+                <span class="material-symbols-outlined text-[15px]">open_in_new</span>
+              </a>
+              {% if not a.is_primary %}
+                <button type="button" data-action="/api/assets/{{ a.id }}" data-method="DELETE"
+                        data-confirm="Delete this image from the library?&#10;&#10;The ledger entry stays — the money was spent either way."
+                        title="Delete"
+                        class="ml-auto w-7 h-7 rounded-full grid place-items-center bg-white/12 backdrop-blur-md border border-white/25 text-white hover:bg-danger hover:text-white">
+                  <span class="material-symbols-outlined text-[15px]">delete</span>
+                </button>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </section>
 {% endif %}
 
 <script>

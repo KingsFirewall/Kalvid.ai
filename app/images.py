@@ -25,7 +25,8 @@ import logging
 import time
 import uuid
 
-from . import db, identity as identity_mod, ledger, storage
+from . import db, ledger, storage
+from . import identity as identity_mod
 from .config import settings
 from .jobs import _pool, _shutdown
 from .providers.base import GenerationRequest, ProviderError
@@ -328,15 +329,17 @@ def list_assets(*, persona_id: int | None = None, client_id: int | None = None,
                 exclude_plates: tuple[str, ...] | None = None) -> list[dict]:
     where, params = [], []
     if persona_id is not None:
-        where.append("a.persona_id = ?"); params.append(persona_id)
+        where.append("a.persona_id = ?")
+        params.append(persona_id)
     if client_id is not None:
-        where.append("a.client_id = ?"); params.append(client_id)
+        where.append("a.client_id = ?")
+        params.append(client_id)
     if plates:
-        where.append("a.plate IN (%s)" % ",".join("?" * len(plates)))
+        where.append("a.plate IN ({})".format(",".join("?" * len(plates))))
         params.extend(plates)
     if exclude_plates:
-        where.append("(a.plate IS NULL OR a.plate NOT IN (%s))"
-                     % ",".join("?" * len(exclude_plates)))
+        where.append("(a.plate IS NULL OR a.plate NOT IN ({}))".format(
+            ",".join("?" * len(exclude_plates))))
         params.extend(exclude_plates)
     sql = """SELECT a.*, p.name AS persona_name, c.name AS client_name
                FROM assets a

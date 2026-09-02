@@ -92,8 +92,10 @@ def test_concurrent_reservations_cannot_both_slip_under_the_cap(client_id, perso
             results.append(("error", repr(exc)))
 
     threads = [threading.Thread(target=attempt) for _ in range(2)]
-    for t in threads: t.start()
-    for t in threads: t.join(timeout=15)
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=15)
 
     kinds = sorted(k for k, _ in results)
     assert kinds == ["blocked", "ok"], f"expected exactly one to win, got {results}"
@@ -136,8 +138,11 @@ def test_a_lapsed_promotional_price_reads_as_unverified():
     import dataclasses
     from datetime import date, timedelta
 
-    rate = final_rate()
-    assert rate.verified, "the configured final rate should currently be verified"
+    # Start from a candidate that IS verified today. Picking candidates[0] made this
+    # test depend on the wall clock: the moment the promo on the first-choice model
+    # lapsed, the premise broke even though the behaviour under test was fine.
+    rate = next((r for r in rate_table.candidates("final") if r.verified), None)
+    assert rate is not None, "no verified final-stage rate to test the mechanism with"
     lapsed = dataclasses.replace(rate, price_expires=date.today() - timedelta(days=1))
     assert not lapsed.verified
     with pytest.raises(UnverifiedRate):

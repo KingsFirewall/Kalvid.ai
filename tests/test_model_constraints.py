@@ -6,7 +6,6 @@ Schema per fal's docs for minimax/h3-max/image-to-video:
 Notably absent: negative_prompt, width, height.
 """
 import dataclasses
-import json
 
 import pytest
 
@@ -21,10 +20,18 @@ FINAL = "fal:minimax/h3-max/image-to-video"
 # ------------------------------------------------------------ pricing shape
 
 def test_model_bills_by_the_second_not_in_fixed_tiers():
-    """The published schema takes a plain integer duration — no 6s/10s tiers."""
+    """The published schema takes a plain integer duration — no 6s/10s tiers.
+
+    But it does have a floor. This test originally asserted that a 3s draft is billed
+    as 3s; the first live call returned a 422 saying duration must be >= 5, so the
+    assumption was wrong and the code now clamps. Billing by the second and having a
+    minimum are different things, and only one of them was in the docs we read.
+    """
     r = rate_table.get(FINAL)
-    assert r.fixed_durations == ()
-    assert r.billed_duration(3) == 3, "a 3s draft is billed as 3s"
+    assert r.fixed_durations == (), "no tier list — it really is per-second"
+    assert r.min_duration == 5, "…but never shorter than 5s"
+    assert r.billed_duration(3) == 5, "a 3s draft is submitted and billed as 5s"
+    assert r.billed_duration(7) == 7, "above the floor, per-second is per-second"
     assert r.estimate(duration_s=3) < r.estimate(duration_s=8)
 
 

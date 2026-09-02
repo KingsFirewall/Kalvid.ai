@@ -77,14 +77,16 @@
         }
       },
       "last_verified": "2026-08-30",
-      "source": "fal.ai/models/minimax/h3-max/image-to-video \u2014 schema and price read from the model page",
+      "source": "fal.ai/models/minimax/h3-max/image-to-video \u2014 schema and price read from the model page Duration bounds 5-15s inclusive, from the endpoint's OpenAPI schema \u2014 a 3s request is rejected with a 422.",
       "price_by": "resolution",
       "usd_by": {
         "480P": 0.025,
         "768P": 0.04
       },
       "price_expires": "2026-09-01",
-      "price_note": "promo launch rate, 50% off; reverts 2026-09-01 to 480P $0.05/s, 768P $0.08/s"
+      "price_note": "promo launch rate, 50% off; reverts 2026-09-01 to 480P $0.05/s, 768P $0.08/s",
+      "min_duration": 5,
+      "max_duration": 15
     },
     "runware:DRAFT_IMAGE_MODEL": {
       "provider": "runware",

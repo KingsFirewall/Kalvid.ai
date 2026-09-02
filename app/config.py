@@ -66,8 +66,13 @@ class Settings:
     operator: str = field(default_factory=lambda: os.getenv("KALVID_OPERATOR", "operator"))
 
     # Master switch. While true, every provider call is routed to the mock adapter
-    # and NOTHING is billable. Flip only when you actually mean to spend money.
-    dry_run: bool = field(default_factory=lambda: _env_bool("KALVID_DRY_RUN", True))
+    # and NOTHING is billable.
+    #
+    # It now defaults to FALSE — i.e. real generation — because defaulting to true
+    # meant a missing or unset variable silently produced mock artifacts that look
+    # like a broken app rather than a safe one. The tests set it explicitly (see
+    # tests/conftest.py), which is the only place it should ever be on by default.
+    dry_run: bool = field(default_factory=lambda: _env_bool("KALVID_DRY_RUN", False))
 
     # How stale a price in rates.json may get before the dashboard flags it.
     # Provider prices move often; a silently stale table makes the budget guard lie.

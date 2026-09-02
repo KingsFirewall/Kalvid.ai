@@ -21,6 +21,23 @@ from .base import GenerationRequest, GenerationResult, Provider, ProviderError
 QUEUE_BASE = "https://queue.fal.run"
 
 
+def queue_app(model: str) -> str:
+    """The id the QUEUE knows a model by — its first two path segments.
+
+    fal submits to the full endpoint path but exposes status and result under the
+    owning app only:
+
+        POST https://queue.fal.run/fal-ai/flux/schnell          <- full path
+        GET  https://queue.fal.run/fal-ai/flux/requests/{id}/status   <- app only
+
+    Using the full path for status returns 405 Method Not Allowed, which is easy to
+    misread as a transport problem. It is not: the submitted job runs and is billed,
+    and only the polling fails — so the render is paid for and then abandoned.
+    Verified against every model in rates.json.
+    """
+    return "/".join(model.split("/")[:2])
+
+
 class FalProvider(Provider):
     name = "fal"
 
@@ -92,7 +109,7 @@ class FalProvider(Provider):
         return GenerationResult(status="running", provider_job_id=rid, raw=data)
 
     def poll(self, provider_job_id: str, req: GenerationRequest) -> GenerationResult:
-        base = f"{QUEUE_BASE}/{req.model}/requests/{provider_job_id}"
+        base = f"{QUEUE_BASE}/{queue_app(req.model)}/requests/{provider_job_id}"
         r = self._client.get(f"{base}/status", headers=self._headers)
         if r.status_code >= 400:
             raise ProviderError(f"fal status {r.status_code}: {r.text[:400]}")

@@ -39,6 +39,11 @@ class Rate:
     #   string          -> "8"    (wan, kling, seedance)
     #   seconds_suffix  -> "8s"   (veo)
     duration_format: str = "int"
+    # Server-enforced bounds. A request outside them is rejected by fal with a 422
+    # that arrives as a failed result rather than a refused submit — so it looks like
+    # a render that failed, not a request that was never valid.
+    min_duration: float = 0.0
+    max_duration: float = 0.0
     # Some editing models take a LIST of conditioning images (nano-banana's
     # image_urls) rather than a single image_url. That is also how a reference pack
     # gets used as a pack rather than one plate at a time.
@@ -92,13 +97,23 @@ class Rate:
         return age is None or age > settings.rate_staleness_days
 
     def billed_duration(self, duration_s: float) -> float:
-        """What the provider actually charges for, not what we asked for."""
+        """What the provider actually charges for, not what we asked for.
+
+        Clamped to the model's declared bounds first: asking a 5s-minimum model for a
+        3s draft does not produce a 3s clip, it produces a 422 — and the draft is
+        billed at 5s regardless, which is what the estimate must say.
+        """
+        d = max(duration_s, 0.0)
+        if self.min_duration:
+            d = max(d, self.min_duration)
+        if self.max_duration:
+            d = min(d, self.max_duration)
         if not self.fixed_durations:
-            return max(duration_s, 0.0)
+            return d
         allowed = sorted(self.fixed_durations)
-        for d in allowed:
-            if duration_s <= d:
-                return float(d)
+        for opt in allowed:
+            if d <= opt:
+                return float(opt)
         return float(allowed[-1])
 
     def estimate(self, duration_s: float = 0.0, calls: int = 1,
@@ -147,6 +162,8 @@ class RateTable:
                 identity_via_image=bool(r.get("identity_via_image", False)),
                 fixed_durations=tuple(r.get("fixed_durations", ()) or ()),
                 duration_format=r.get("duration_format", "int"),
+                min_duration=float(r.get("min_duration") or 0.0),
+                max_duration=float(r.get("max_duration") or 0.0),
                 reference_field=r.get("reference_field", "image_url"),
                 supports=tuple(r.get("supports", ()) or ()),
                 params=r.get("params", {}) or {},

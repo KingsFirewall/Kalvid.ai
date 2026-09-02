@@ -67,7 +67,7 @@
     }
   }
 </script>
-<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/app.css?v={{ asset_v }}">
 </head>
 
 {% set path = request.url.path %}
@@ -164,16 +164,48 @@
   </button>
 
   <div class="relative z-10 max-w-[1500px] mx-auto px-margin-mobile md:px-margin-desktop py-md md:py-lg space-y-md">
+
+    <!-- Client logo slot. Drop a file at app/web/static/logo.png (or .svg) and it
+         appears here on every page; until then this is a labelled empty space rather
+         than a broken image. -->
+    <div class="flex justify-end -mb-1">
+      <a href="/settings" class="group flex items-center gap-2.5 h-10" title="Brand logo — replace app/web/static/logo.png">
+        <img src="/static/logo.png" alt="" onerror="this.remove()"
+             class="h-9 w-auto max-w-[190px] object-contain">
+        <span class="logo-fallback flex items-center gap-2 h-9 px-3.5 rounded-lg border border-dashed border-white/12
+                     text-[11.5px] text-on-surface-variant/70 group-hover:border-primary/35 group-hover:text-primary transition-colors">
+          <span class="material-symbols-outlined text-[15px]">add_photo_alternate</span>
+          Your logo
+        </span>
+      </a>
+    </div>
+
     {% if status.warnings %}
-      <div class="space-y-2">
+      <!-- Dismissible. These are operator notices, not client-facing copy, and a
+           studio showing work to a customer should be able to clear them. Dismissal
+           is keyed to the message text, so a DIFFERENT warning still appears — and
+           the LIVE/DRY-RUN badge in the side rail is never dismissible, so the one
+           fact that decides whether clicking costs money is always on screen. -->
+      <div class="space-y-2" id="warnings">
         {% for w in status.warnings %}
           {% set safe = 'DRY RUN' in w %}
-          <div class="flex items-start gap-2.5 rounded-lg border px-4 py-2.5 text-[13px]
-               {{ 'border-ok/25 bg-ok/[0.07] text-ok/90' if safe else 'border-warn/30 bg-warn/[0.07] text-warn/90' }}">
+          <div class="warning-row flex items-start gap-2.5 rounded-lg border px-4 py-2.5 text-[13px]
+               {{ 'border-ok/25 bg-ok/[0.07] text-ok/90' if safe else 'border-warn/30 bg-warn/[0.07] text-warn/90' }}"
+               data-warning="{{ w }}">
             <span class="material-symbols-outlined text-[18px] shrink-0">{{ 'verified_user' if safe else 'warning' }}</span>
-            <span>{{ w }}</span>
+            <span class="flex-1">{{ w }}</span>
+            <button type="button" data-dismiss-warning title="Dismiss — I've seen this"
+                    class="shrink-0 -my-0.5 -mr-1.5 w-7 h-7 rounded-md grid place-items-center opacity-50 hover:opacity-100 hover:bg-white/10 transition">
+              <span class="material-symbols-outlined text-[17px]">close</span>
+            </button>
           </div>
         {% endfor %}
+        {% if status.warnings|length > 1 %}
+          <button type="button" id="dismiss-all-warnings"
+                  class="text-[11.5px] text-on-surface-variant hover:text-on-surface underline underline-offset-2">
+            Dismiss all
+          </button>
+        {% endif %}
       </div>
     {% endif %}
 
@@ -181,6 +213,6 @@
   </div>
 </main>
 
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v={{ asset_v }}"></script>
 </body>
 </html>

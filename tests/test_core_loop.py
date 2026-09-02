@@ -36,7 +36,8 @@ def test_full_loop_draft_then_approve_then_final(persona_id):
 
 def test_double_approve_fires_only_one_render(persona_id):
     job_id = _job(persona_id)
-    jobs.start_draft(job_id); jobs.wait_idle(20)
+    jobs.start_draft(job_id)
+    jobs.wait_idle(20)
 
     jobs.approve(job_id)
     with pytest.raises(jobs.TransitionError, match="already approved|reviewed draft"):
@@ -50,8 +51,10 @@ def test_double_approve_fires_only_one_render(persona_id):
 
 def test_redraft_is_allowed_and_stays_cheap(persona_id):
     job_id = _job(persona_id)
-    jobs.start_draft(job_id); jobs.wait_idle(20)
-    jobs.start_draft(job_id); jobs.wait_idle(20)     # human asks for another draft
+    jobs.start_draft(job_id)
+    jobs.wait_idle(20)
+    jobs.start_draft(job_id)
+    jobs.wait_idle(20)     # human asks for another draft
     rows = db.query("SELECT stage FROM generations WHERE job_id=?", (job_id,))
     assert [r["stage"] for r in rows] == ["draft", "draft"]
 
@@ -71,13 +74,15 @@ def test_every_call_is_logged_before_it_fires(persona_id, monkeypatch):
 
     monkeypatch.setattr(MockProvider, "submit", spy)
     job_id = _job(persona_id)
-    jobs.start_draft(job_id); jobs.wait_idle(20)
+    jobs.start_draft(job_id)
+    jobs.wait_idle(20)
     assert seen["rows_at_submit"] == 1
 
 
 def test_failed_generation_still_costs_and_is_logged(persona_id):
     job_id = _job(persona_id, brief="She speaks to camera FAIL_TEST")
-    jobs.start_draft(job_id); jobs.wait_idle(20)
+    jobs.start_draft(job_id)
+    jobs.wait_idle(20)
 
     gen = db.query_one("SELECT * FROM generations WHERE job_id=?", (job_id,))
     assert gen["status"] == "failed"
@@ -87,7 +92,8 @@ def test_failed_generation_still_costs_and_is_logged(persona_id):
 
 def test_no_automatic_retry_after_failure(persona_id):
     job_id = _job(persona_id, brief="She speaks to camera FAIL_TEST")
-    jobs.start_draft(job_id); jobs.wait_idle(20)
+    jobs.start_draft(job_id)
+    jobs.wait_idle(20)
     jobs.wait_idle(5)
     n = db.query_one("SELECT COUNT(*) n FROM generations WHERE job_id=?", (job_id,))["n"]
     assert n == 1, "a failure must go back to a human, never auto-refire"

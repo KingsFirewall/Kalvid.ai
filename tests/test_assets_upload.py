@@ -5,9 +5,6 @@ variable is what makes the product work. Never let a variable leak into the iden
 layer." A pair of glasses is not part of who someone is — and treating it as if it
 were means every future render inherits it and it cannot be deleted.
 """
-import struct
-import zlib
-
 import pytest
 
 from app import db, identity, images

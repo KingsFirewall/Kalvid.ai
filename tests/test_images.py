@@ -9,6 +9,7 @@ import pytest
 from app import db, images, jobs, ledger
 from app.rates import rate_table
 
+
 # Dry run deliberately bills $0 (see router.Route), so the guard is exercised the way
 # tests/test_budget_guard.py does it: with the REAL rate and billable=False, which
 # reserves at the true price without ever making a live call.
